@@ -916,3 +916,84 @@ body {
 .text-center { text-align: center; }
 .py-3 { padding-top: var(--spacing-3); padding-bottom: var(--spacing-3); }
 .py-4 { padding-top: var(--spacing-4); padding-bottom: var(--spacing-4); }
+
+/* ================= First-Start Setup Modal ================= */
+.setup-sheet {
+  max-width: 480px;
+}
+.setup-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  background-color: var(--color-paytm-bg);
+  border: 1px solid var(--color-paytm);
+  color: var(--color-paytm);
+  font-size: 0.72rem;
+  font-weight: 800;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.setup-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+.setup-intro {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin-top: var(--spacing-2);
+  margin-bottom: var(--spacing-4);
+}
+.setup-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+.setup-step-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-3) var(--spacing-4);
+}
+.setup-step-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+.setup-step-body {
+  flex: 1;
+}
+.setup-step-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.setup-step-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+.setup-action-btn {
+  flex-shrink: 0;
+  min-width: 80px;
+}
+.setup-action-btn.granted, .btn.granted {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+  color: var(--color-success) !important;
+  border: 1px solid var(--color-success) !important;
+  cursor: default;
+}
+.btn-text {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: var(--spacing-2);
+}
+.btn-text:hover {
+  color: var(--text-primary);
+}

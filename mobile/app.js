@@ -18,6 +18,7 @@ class WhoseTabApp {
     this.initAppVersion();
     this.bindEvents();
     this.checkScannerStatus();
+    this.checkInitialSetup();
     this.checkUrlParameters();
     this.checkPendingPayment();
     this.render();
@@ -107,6 +108,15 @@ class WhoseTabApp {
       grantNotificationAccessBtn: document.getElementById('grantNotificationAccessBtn'),
       grantOverlayAccessBtn: document.getElementById('grantOverlayAccessBtn'),
 
+      setupModal: document.getElementById('setupModal'),
+      closeSetupModalBtn: document.getElementById('closeSetupModalBtn'),
+      setupStepNotif: document.getElementById('setupStepNotif'),
+      setupGrantNotifBtn: document.getElementById('setupGrantNotifBtn'),
+      setupStepOverlay: document.getElementById('setupStepOverlay'),
+      setupGrantOverlayBtn: document.getElementById('setupGrantOverlayBtn'),
+      completeSetupBtn: document.getElementById('completeSetupBtn'),
+      skipSetupBtn: document.getElementById('skipSetupBtn'),
+
       checkForUpdatesBtn: document.getElementById('checkForUpdatesBtn'),
       appVersionDisplay: document.getElementById('appVersionDisplay'),
       updateStatusNotice: document.getElementById('updateStatusNotice'),
@@ -161,27 +171,118 @@ class WhoseTabApp {
           }
         } catch (e) {}
       }
-      this.dom.appVersionDisplay.textContent = 'v1.0.1';
+      this.dom.appVersionDisplay.textContent = 'v1.0.2';
     }
   }
 
   // ================= SCANNER STATUS IN NAVBAR =================
   checkScannerStatus() {
     let isRunning = false;
-    if (window.AndroidBridge && window.AndroidBridge.isScannerRunning) {
-      isRunning = window.AndroidBridge.isScannerRunning();
+    let notifGranted = false;
+    let overlayGranted = false;
+
+    if (window.AndroidBridge) {
+      if (window.AndroidBridge.isScannerRunning) {
+        isRunning = window.AndroidBridge.isScannerRunning();
+      }
+      if (window.AndroidBridge.isNotificationAccessGranted) {
+        notifGranted = window.AndroidBridge.isNotificationAccessGranted();
+      }
+      if (window.AndroidBridge.isOverlayPermissionGranted) {
+        overlayGranted = window.AndroidBridge.isOverlayPermissionGranted();
+      }
     } else {
-      isRunning = true; // Web / standalone default
+      isRunning = true;
+      notifGranted = true;
+      overlayGranted = true;
     }
 
     if (this.dom.scannerStatusBadge && this.dom.scannerStatusText) {
-      if (isRunning) {
+      if (isRunning && notifGranted && overlayGranted) {
         this.dom.scannerStatusBadge.className = 'scanner-badge active';
         this.dom.scannerStatusText.textContent = 'SCANNING FOR PAYMENTS';
       } else {
         this.dom.scannerStatusBadge.className = 'scanner-badge inactive';
-        this.dom.scannerStatusText.textContent = '⚠️ SCANNER PAUSED - TAP TO ACTIVATE';
+        this.dom.scannerStatusText.textContent = '⚠️ SCANNER PAUSED - TAP TO SETUP';
       }
+    }
+  }
+
+  // ================= FIRST-START SETUP & LIVE PERMISSIONS =================
+  checkInitialSetup() {
+    let notifGranted = false;
+    let overlayGranted = false;
+
+    if (window.AndroidBridge) {
+      if (window.AndroidBridge.isNotificationAccessGranted) {
+        notifGranted = window.AndroidBridge.isNotificationAccessGranted();
+      }
+      if (window.AndroidBridge.isOverlayPermissionGranted) {
+        overlayGranted = window.AndroidBridge.isOverlayPermissionGranted();
+      }
+    } else {
+      notifGranted = true;
+      overlayGranted = true;
+    }
+
+    this.updatePermissionUI('setupGrantNotifBtn', 'grantNotificationAccessBtn', notifGranted);
+    this.updatePermissionUI('setupGrantOverlayBtn', 'grantOverlayAccessBtn', overlayGranted);
+
+    if (this.dom.completeSetupBtn) {
+      if (notifGranted && overlayGranted) {
+        this.dom.completeSetupBtn.textContent = '🎉 All Set — Let\'s Go!';
+        this.dom.completeSetupBtn.className = 'btn btn-success btn-block btn-lg';
+      } else {
+        this.dom.completeSetupBtn.textContent = 'Continue to WhoseTab';
+        this.dom.completeSetupBtn.className = 'btn btn-primary btn-block btn-lg';
+      }
+    }
+
+    // Auto-prompt on first launch if setup not yet dismissed and permissions are missing
+    const dismissed = localStorage.getItem('whosetab_setup_dismissed');
+    if (!dismissed && (!notifGranted || !overlayGranted)) {
+      this.openSetupModal();
+    }
+  }
+
+  updatePermissionUI(setupBtnId, settingsBtnId, isGranted) {
+    const sBtn = document.getElementById(setupBtnId);
+    const setBtn = document.getElementById(settingsBtnId);
+    
+    if (sBtn) {
+      if (isGranted) {
+        sBtn.textContent = '✅ Granted';
+        sBtn.className = 'btn btn-sm btn-success setup-action-btn granted';
+        sBtn.disabled = true;
+      } else {
+        sBtn.textContent = 'Enable';
+        sBtn.className = 'btn btn-sm btn-primary setup-action-btn';
+        sBtn.disabled = false;
+      }
+    }
+
+    if (setBtn) {
+      if (isGranted) {
+        setBtn.textContent = '✅ Granted';
+        setBtn.className = 'btn btn-sm btn-success granted';
+        setBtn.disabled = true;
+      } else {
+        setBtn.textContent = 'Enable';
+        setBtn.className = 'btn btn-sm btn-primary';
+        setBtn.disabled = false;
+      }
+    }
+  }
+
+  openSetupModal() {
+    if (this.dom.setupModal) {
+      this.dom.setupModal.classList.remove('hidden');
+    }
+  }
+
+  closeSetupModal() {
+    if (this.dom.setupModal) {
+      this.dom.setupModal.classList.add('hidden');
     }
   }
 
@@ -195,14 +296,56 @@ class WhoseTabApp {
       this.dom.themeSelector.addEventListener('change', (e) => this.setTheme(e.target.value));
     }
 
-    // Scanner status badge click: opens notification access settings if paused
+    // Scanner status badge click: opens setup modal
     if (this.dom.scannerStatusBadge) {
       this.dom.scannerStatusBadge.addEventListener('click', () => {
+        this.openSetupModal();
+      });
+    }
+
+    // First Start Setup Modal buttons
+    if (this.dom.setupGrantNotifBtn) {
+      this.dom.setupGrantNotifBtn.addEventListener('click', () => {
         if (window.AndroidBridge && window.AndroidBridge.openNotificationAccessSettings) {
           window.AndroidBridge.openNotificationAccessSettings();
         }
       });
     }
+
+    if (this.dom.setupGrantOverlayBtn) {
+      this.dom.setupGrantOverlayBtn.addEventListener('click', () => {
+        if (window.AndroidBridge && window.AndroidBridge.openOverlayPermissionSettings) {
+          window.AndroidBridge.openOverlayPermissionSettings();
+        }
+      });
+    }
+
+    if (this.dom.completeSetupBtn) {
+      this.dom.completeSetupBtn.addEventListener('click', () => {
+        localStorage.setItem('whosetab_setup_dismissed', 'true');
+        this.closeSetupModal();
+      });
+    }
+
+    if (this.dom.skipSetupBtn) {
+      this.dom.skipSetupBtn.addEventListener('click', () => {
+        localStorage.setItem('whosetab_setup_dismissed', 'true');
+        this.closeSetupModal();
+      });
+    }
+
+    if (this.dom.closeSetupModalBtn) {
+      this.dom.closeSetupModalBtn.addEventListener('click', () => {
+        localStorage.setItem('whosetab_setup_dismissed', 'true');
+        this.closeSetupModal();
+      });
+    }
+
+    // Live refresh when returning from Android System Settings
+    window.addEventListener('focus', () => {
+      this.checkScannerStatus();
+      this.checkInitialSetup();
+    });
 
     // Paytm Open Delay Setting
     if (this.dom.paytmDelaySelector) {

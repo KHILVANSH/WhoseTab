@@ -142,20 +142,20 @@
         <!-- Android Permissions for Payment Interception -->
         <h3 class="mt-4">Background Scanner Permissions</h3>
         <div class="card settings-card mt-2">
-          <div class="setting-item">
+          <div class="setting-item" id="settingsItemNotif">
             <div class="setting-text">
               <span class="setting-title">1. Notification Access</span>
               <span class="setting-desc">Intercepts payment confirmations from Paytm</span>
             </div>
-            <button type="button" id="grantNotificationAccessBtn" class="btn btn-sm btn-secondary">Open Settings</button>
+            <button type="button" id="grantNotificationAccessBtn" class="btn btn-sm btn-primary">Enable</button>
           </div>
 
-          <div class="setting-item mt-2">
+          <div class="setting-item mt-2" id="settingsItemOverlay">
             <div class="setting-text">
               <span class="setting-title">2. Draw Over Other Apps</span>
               <span class="setting-desc">Bypasses Android lock to open app over Paytm</span>
             </div>
-            <button type="button" id="grantOverlayAccessBtn" class="btn btn-sm btn-secondary">Open Settings</button>
+            <button type="button" id="grantOverlayAccessBtn" class="btn btn-sm btn-primary">Enable</button>
           </div>
         </div>
 
@@ -165,7 +165,7 @@
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">WhoseTab Version</span>
-              <span class="setting-desc" id="appVersionDisplay">v1.0.1</span>
+              <span class="setting-desc" id="appVersionDisplay">v1.0.2</span>
             </div>
             <button type="button" id="checkForUpdatesBtn" class="btn btn-sm btn-primary">Check for updates</button>
           </div>
@@ -210,6 +210,59 @@
         <span class="nav-label">Settings</span>
       </button>
     </nav>
+
+    <!-- MODAL: FIRST START SETUP & SCANNER PERMISSIONS -->
+    <div id="setupModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-sheet setup-sheet">
+        <div class="sheet-handle"></div>
+        <div class="modal-header">
+          <div>
+            <span class="setup-badge">⚡ Setup Required</span>
+            <h3 class="setup-title mt-1">Enable Paytm Snapper</h3>
+          </div>
+          <button type="button" id="closeSetupModalBtn" class="btn-close" aria-label="Dismiss">✕</button>
+        </div>
+
+        <p class="setup-intro">
+          WhoseTab automatically intercepts Paytm payments and pops open to let you choose whose stuff you bought. Please enable these 2 required permissions:
+        </p>
+
+        <div class="setup-steps-list">
+          <!-- Step 1: Notification Access -->
+          <div class="setup-step-card" id="setupStepNotif">
+            <div class="setup-step-icon">🔔</div>
+            <div class="setup-step-body">
+              <div class="setup-step-title">1. Notification Access</div>
+              <div class="setup-step-desc">Allows scanner to intercept Paytm payment notifications.</div>
+            </div>
+            <button type="button" id="setupGrantNotifBtn" class="btn btn-sm btn-primary setup-action-btn">
+              Enable
+            </button>
+          </div>
+
+          <!-- Step 2: Display Over Other Apps -->
+          <div class="setup-step-card" id="setupStepOverlay">
+            <div class="setup-step-icon">📱</div>
+            <div class="setup-step-body">
+              <div class="setup-step-title">2. Draw Over Other Apps</div>
+              <div class="setup-step-desc">Allows WhoseTab to instantly pop open on your screen right after you pay.</div>
+            </div>
+            <button type="button" id="setupGrantOverlayBtn" class="btn btn-sm btn-primary setup-action-btn">
+              Enable
+            </button>
+          </div>
+        </div>
+
+        <div class="setup-footer mt-4">
+          <button type="button" id="completeSetupBtn" class="btn btn-primary btn-block btn-lg">
+            Continue to WhoseTab
+          </button>
+          <button type="button" id="skipSetupBtn" class="btn btn-text btn-block mt-2">
+            I'll configure this later in Settings
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- MODAL: SNAP / LOG EXPENSE -->
     <div id="snapExpenseModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
@@ -341,7 +394,7 @@
           <button type="button" id="closeUpdateModalBtn" class="btn-close">✕</button>
         </div>
         <div class="p-2">
-          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.0.1</div>
+          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.0.2</div>
           <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Bug fixes and improvements</div>
           <div class="modal-footer mt-4">
             <button type="button" id="downloadUpdateBtn" class="btn btn-primary btn-block btn-lg">Download & Install</button>

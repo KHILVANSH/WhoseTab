@@ -31,9 +31,9 @@ public class UpdateManager {
     public static String getCurrentVersion(Context context) {
         try {
             PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
-            return pInfo.versionName != null ? pInfo.versionName : "1.0.1";
+            return pInfo.versionName != null ? pInfo.versionName : "1.0.2";
         } catch (Exception e) {
-            return "1.0.1";
+            return "1.0.2";
         }
     }
 
@@ -110,6 +110,16 @@ public class UpdateManager {
         Toast.makeText(context, "Downloading WhoseTab update...", Toast.LENGTH_SHORT).show();
 
         try {
+            File targetDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            if (targetDir != null && !targetDir.exists()) {
+                targetDir.mkdirs();
+            }
+            // Delete prior update file if present so DownloadManager doesn't create duplicate numbered files
+            File existingFile = new File(targetDir, "WhoseTab-latest.apk");
+            if (existingFile.exists()) {
+                existingFile.delete();
+            }
+
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(apkUrl));
             request.setTitle("WhoseTab Update");
             request.setDescription("Downloading latest release APK");
@@ -140,7 +150,21 @@ public class UpdateManager {
 
     public static void installDownloadedApk(Context context) {
         File apkFile = new File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "WhoseTab-latest.apk");
-        if (!apkFile.exists()) return;
+        if (!apkFile.exists()) {
+            Toast.makeText(context, "Update file not found", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // On Android 8.0+, verify unknown sources permission for this app
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!context.getPackageManager().canRequestPackageInstalls()) {
+                Toast.makeText(context, "Please allow WhoseTab to install updates", Toast.LENGTH_LONG).show();
+                Intent permissionIntent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.getPackageName()));
+                permissionIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(permissionIntent);
+                return;
+            }
+        }
 
         Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", apkFile);
         Intent installIntent = new Intent(Intent.ACTION_VIEW);

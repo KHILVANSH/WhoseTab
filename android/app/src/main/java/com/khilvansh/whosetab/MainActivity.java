@@ -87,6 +87,12 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         // Check if there is any pending payment awaiting consumption
         handleIntentData(getIntent());
+        // Live refresh scanner status & initial setup state in web UI
+        if (webView != null) {
+            webView.post(() -> {
+                webView.evaluateJavascript("if(window.app){ if(window.app.checkScannerStatus) window.app.checkScannerStatus(); if(window.app.checkInitialSetup) window.app.checkInitialSetup(); }", null);
+            });
+        }
     }
 
     private void handleIntentData(Intent intent) {

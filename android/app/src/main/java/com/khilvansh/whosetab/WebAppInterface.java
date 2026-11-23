@@ -102,6 +102,25 @@ public class WebAppInterface {
         PaymentDataStore.clearPendingPayment(activity);
     }
 
+    // --- PACKAGE INSTALL PERMISSION ---
+    @JavascriptInterface
+    public boolean canRequestPackageInstalls() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return activity.getPackageManager().canRequestPackageInstalls();
+        }
+        return true;
+    }
+
+    @JavascriptInterface
+    public void openUnknownSourcesSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + activity.getPackageName()));
+                activity.startActivity(intent);
+            } catch (Exception ignored) {}
+        }
+    }
+
     @JavascriptInterface
     public void checkForUpdates() {
         UpdateManager.checkForUpdates(activity, new UpdateManager.UpdateCheckCallback() {
