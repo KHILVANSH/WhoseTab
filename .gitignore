@@ -3,6 +3,14 @@
 **/*.rs.bk
 Cargo.lock
 
+# Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.gradle/
+build/
+
 # Operating System
 Thumbs.db
 .DS_Store

@@ -1,13 +1,17 @@
 # ⚡ WhoseTab
 
 > **Never lose track of who you bought what for.**  
-> A high-performance, offline-first peer expense manager and Paytm logger built in **Rust** for mobile and desktop.
+> A high-performance, offline-first peer expense manager and Paytm logger built in **Rust** and native Android.
+
+[![Release](https://img.shields.io/github/v/release/KHILVANSH/WhoseTab?label=Release&color=3B82F6)](https://github.com/KHILVANSH/WhoseTab/releases)
+[![Rust](https://img.shields.io/badge/Rust-1.100-orange.svg)](https://www.rust-lang.org/)
+[![Android](https://img.shields.io/badge/Android-APK_v1.0.0-green.svg)](https://github.com/KHILVANSH/WhoseTab/releases/tag/v1.0.0)
 
 ---
 
 ## 🎯 The Problem
 
-When purchasing groceries, lab supplies, food, cab rides, or stationery for **roommates, classmates, and friends**, tracking debts via WhatsApp is a nightmare:
+When purchasing groceries, lab supplies, canteen snacks, cab rides, or stationery for **roommates, classmates, and friends**, tracking debts via WhatsApp is a nightmare:
 - **Disputed calculations** — mental math and WhatsApp message threads always go wrong.
 - **Cluttered chats** — group chats get bogged down with "Hey, you owe me ₹120 for samosas" and "Paid ₹340 for wifi".
 - **Forgotten purchases** — you pay at the counter with Paytm or UPI, walk away, and forget to log who it was actually for.
@@ -16,18 +20,44 @@ When purchasing groceries, lab supplies, food, cab rides, or stationery for **ro
 
 ## 🚀 The Solution: WhoseTab
 
-**WhoseTab** is built from the ground up to solve this in under **2 seconds**:
-1. **Paytm Payment Intent / Snapper**: Right after paying via Paytm, the paid amount automatically pre-fills in WhoseTab via deep-link (`whosetab://snap?amount=...`), clipboard detection, or the Android Share sheet.
-2. **One-Tap "Who was this for?" Picker**: Tap your roommate or classmate's chip, choose whether it was **100% for them** or **Split 50/50**, and tap **Save to Tab**. Done!
-3. **Rust Core Performance**: Built in Rust for sub-millisecond calculation speeds, zero lag, zero battery drain, and graph-based debt minimization.
-4. **100% Offline Storage**: All data stays private on your device in persistent local storage with zero cloud dependence.
-5. **Generic Dark Theme Default + White Mode Toggle**: Follows system default, with an instant toggle in settings and in the top header.
-6. **Mobile HIG & Material 3 Compliant**:
+**WhoseTab** solves this in under **2 seconds**:
+1. **Paytm Payment Snapper**: When you pay on Paytm, WhoseTab automatically detects the payment and brings the app right to the foreground with the amount pre-filled.
+2. **Configurable Open Delay**: Option in Settings to choose the launch behavior:
+   - ⚡ **Instant (No delay, 0s)**
+   - ⏱️ **Slight delay (1 second)**
+   - ⏱️ **2 seconds / 3 seconds / 5 seconds**
+3. **One-Tap "Who was this for?" Picker**: Tap your roommate or classmate's chip, choose whether it was **100% for them** or **Split 50/50**, and tap **Save to Tab**. Done!
+4. **In-App Auto-Updates from GitHub**: The app checks the private GitHub repository (`KHILVANSH/WhoseTab/releases`) for new APK releases and downloads/installs updates directly on your phone with one tap.
+5. **Rust Core Performance**: Built in Rust for sub-millisecond calculation speeds, zero lag, zero battery drain, and graph-based debt minimization.
+6. **100% Offline Storage**: All data stays private on your device in persistent local storage with zero cloud dependence.
+7. **Generic Dark Theme Default + White Mode Toggle**: Follows system default, with an instant toggle in settings and in the top header.
+8. **Mobile HIG & Material 3 Compliant**:
    - Safe Area Insets (notch, status bar, and gesture navigation bar).
    - 16dp standard horizontal margin on mobile screens.
    - 8dp spacing grid system.
    - Minimum 48x48dp touch targets on all interactive chips, buttons, and form inputs.
    - Thumb-friendly bottom navigation.
+
+---
+
+## 📥 Download Release APK
+
+The signed, release APK is compiled and ready:
+- **Direct file**: [`releases/WhoseTab-v1.0.0.apk`](releases/WhoseTab-v1.0.0.apk)
+- **GitHub Release Page**: [https://github.com/KHILVANSH/WhoseTab/releases/tag/v1.0.0](https://github.com/KHILVANSH/WhoseTab/releases/tag/v1.0.0)
+
+To install on your phone:
+```bash
+adb install -r "releases/WhoseTab-v1.0.0.apk"
+```
+
+---
+
+## ⚙️ Android Permissions (For Auto-Opening after Paytm)
+
+To allow WhoseTab to launch right after completing a payment in Paytm, open **Settings** inside the app and tap:
+1. **Notification Access** (`Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS`): Allows `PaytmNotificationListenerService` to detect transactions from `net.one97.paytm`.
+2. **Draw Over Other Apps / Overlay** (`Settings.ACTION_MANAGE_OVERLAY_PERMISSION`): Allows Android to bring WhoseTab directly over Paytm without Android OS background activity restrictions.
 
 ---
 
@@ -51,11 +81,25 @@ WhoseTab/
 ├── mobile/                       # Mobile-optimized application UI
 │   ├── index.html                # Responsive mobile viewport with Safe Area insets
 │   ├── style.css                 # Generic dark theme, white mode toggle, 8dp grid
-│   ├── app.js                    # Offline ledger logic, clipboard sniffer, deep link
+│   ├── app.js                    # Offline ledger logic, clipboard sniffer, delay settings
 │   └── manifest.json             # PWA manifest with Android share target
-├── android/                      # Native Android integration files
-│   ├── AndroidManifest.xml       # Deep link (whosetab://), ACTION_SEND, Notification listener
-│   └── PaytmNotificationService.java # Background listener for Paytm (net.one97.paytm)
+├── android/                      # Standalone Native Android Gradle Project
+│   ├── build.gradle
+│   ├── settings.gradle
+│   ├── gradle.properties
+│   └── app/
+│       ├── build.gradle          # Signed Release build configuration
+│       ├── keystore.jks          # Release signing keystore
+│       └── src/main/
+│           ├── AndroidManifest.xml # Intent filters, permissions, FileProvider
+│           ├── java/com/khilvansh/whosetab/
+│           │   ├── MainActivity.java
+│           │   ├── PaytmNotificationListenerService.java
+│           │   ├── UpdateManager.java
+│           │   └── WebAppInterface.java
+│           └── assets/web/       # Embedded offline assets
+├── releases/
+│   └── WhoseTab-v1.0.0.apk       # Compiled release APK
 └── scripts/
     ├── update-pat.ps1            # Windows PowerShell GitHub PAT configuration helper
     └── update-pat.sh             # Linux/macOS GitHub PAT configuration helper
@@ -89,27 +133,6 @@ cargo run --bin whosetab-cli -- settle "Aman Verma" 350
 
 ---
 
-## 📱 Mobile App Features
-
-### 1. Direct Paytm Integration
-- **Deep Link URL**: `whosetab://snap?amount=340&to=Sharma%20Kirana&note=Groceries`
-- **Android Share Target**: When paying on Paytm, tap "Share Receipt" and select **WhoseTab** from the Android share sheet.
-- **Smart Clipboard Sniffer**: Automatically checks clipboard on app focus for copied Paytm SMS text or UPI confirmations and pops up a quick snap banner.
-- **Paytm Simulation Strip**: One-tap demo buttons (`₹340 Groceries`, `₹120 Canteen`, `₹450 Xerox`) to test the flow instantly.
-
-### 2. Design & Mobile Guidelines
-- **Margins & Alignment**:
-  - Horizontal screen margins: **16dp** padding.
-  - Spacing grid: **8dp** base spacing.
-  - Touch targets: Every button, tab, and chip has a minimum touch bounding box of **48x48dp**.
-  - Safe Areas: Respects top notch/island (`env(safe-area-inset-top)`) and bottom gesture home bar (`env(safe-area-inset-bottom)`).
-- **Theme Modes**:
-  - **Dark Theme (Default)**: Deep `#0B0F19` background, `#141C2E` surfaces, `#2A374D` subtle borders, emerald accents for balances.
-  - **White Mode (Light)**: Clean `#F8FAFC` background, pure `#FFFFFF` cards, high-contrast text.
-  - **System Default**: Automatically synchronizes with your device's dark/light schedule.
-
----
-
 ## 🔐 GitHub PAT Setup & Updates
 
 This private repository is configured for token-based Git operations. To update or refresh your GitHub Personal Access Token (PAT) for this repository:
@@ -117,10 +140,6 @@ This private repository is configured for token-based Git operations. To update 
 ### Windows (PowerShell):
 ```powershell
 .\scripts\update-pat.ps1
-```
-Or with an inline token:
-```powershell
-.\scripts\update-pat.ps1 -Token "ghp_yourPersonalAccessTokenHere"
 ```
 
 ### Linux / macOS / Git Bash:

@@ -111,10 +111,11 @@
         <h2>App Settings</h2>
         
         <div class="card settings-card mt-3">
+          <!-- Appearance Theme -->
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">Appearance Theme</span>
-              <span class="setting-desc">Choose generic dark theme or white mode</span>
+              <span class="setting-desc">Generic dark theme default or white mode</span>
             </div>
             <select id="themeSelector" class="form-select">
               <option value="system">System Default</option>
@@ -123,10 +124,26 @@
             </select>
           </div>
 
+          <!-- Paytm Open Delay (Instant vs Slight Delay) -->
           <div class="setting-item">
             <div class="setting-text">
-              <span class="setting-title">Auto-Detect Paytm Clipboard</span>
-              <span class="setting-desc">Check for Paytm payment receipts on app switch</span>
+              <span class="setting-title">Paytm Open Delay</span>
+              <span class="setting-desc">Wait before auto-opening after Paytm payment</span>
+            </div>
+            <select id="paytmDelaySelector" class="form-select">
+              <option value="0" selected>⚡ Instant (No Delay, 0s)</option>
+              <option value="1000">⏱️ Slight Delay (1 second)</option>
+              <option value="2000">⏱️ 2 seconds</option>
+              <option value="3000">⏱️ 3 seconds</option>
+              <option value="5000">⏱️ 5 seconds</option>
+            </select>
+          </div>
+
+          <!-- Auto Detect Clipboard -->
+          <div class="setting-item">
+            <div class="setting-text">
+              <span class="setting-title">Clipboard Sniffer</span>
+              <span class="setting-desc">Detect copied Paytm transaction text on app switch</span>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" id="autoDetectClipboardToggle" checked>
@@ -137,10 +154,45 @@
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">Currency Symbol</span>
-              <span class="setting-desc">Default symbol for splits and logs</span>
+              <span class="setting-desc">Default symbol for balances and splits</span>
             </div>
             <span class="badge-pill">₹ (INR)</span>
           </div>
+        </div>
+
+        <h3 class="mt-4">Android Background Permissions</h3>
+        <div class="card settings-card mt-2">
+          <p class="text-secondary text-sm">
+            To automatically pop open WhoseTab right after paying in Paytm, Android requires these two permissions:
+          </p>
+
+          <div class="setting-item mt-2">
+            <div class="setting-text">
+              <span class="setting-title">1. Notification Access</span>
+              <span class="setting-desc">Reads "Paid ₹X to Y" from Paytm notification</span>
+            </div>
+            <button id="grantNotificationAccessBtn" class="btn btn-sm btn-secondary">Grant Permission</button>
+          </div>
+
+          <div class="setting-item mt-2">
+            <div class="setting-text">
+              <span class="setting-title">2. Draw Over Other Apps</span>
+              <span class="setting-desc">Allows launching WhoseTab over Paytm</span>
+            </div>
+            <button id="grantOverlayAccessBtn" class="btn btn-sm btn-secondary">Grant Permission</button>
+          </div>
+        </div>
+
+        <h3 class="mt-4">Auto-Update from GitHub</h3>
+        <div class="card settings-card mt-2">
+          <div class="setting-item">
+            <div class="setting-text">
+              <span class="setting-title">WhoseTab Version</span>
+              <span class="setting-desc" id="appVersionDisplay">v1.0.0 (Release)</span>
+            </div>
+            <button id="checkForUpdatesBtn" class="btn btn-sm btn-primary">Check for Updates</button>
+          </div>
+          <div id="updateStatusNotice" class="text-xs text-muted mt-1">Checks https://github.com/KHILVANSH/WhoseTab</div>
         </div>
 
         <h3 class="mt-4">Offline Data & Backup</h3>
@@ -319,6 +371,24 @@
             <button type="submit" class="btn btn-success btn-block btn-lg">Confirm Settlement</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- MODAL: GITHUB UPDATE AVAILABLE -->
+    <div id="updateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-sheet">
+        <div class="sheet-handle"></div>
+        <div class="modal-header">
+          <h3>⚡ New Update Available!</h3>
+          <button id="closeUpdateModalBtn" class="btn-close">✕</button>
+        </div>
+        <div class="p-2">
+          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.1.0</div>
+          <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Changelog and improvements</div>
+          <div class="modal-footer mt-4">
+            <button id="downloadUpdateBtn" class="btn btn-primary btn-block btn-lg">Download & Install Update</button>
+          </div>
+        </div>
       </div>
     </div>
 

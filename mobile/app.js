@@ -129,6 +129,19 @@ class WhoseTabApp {
       settleAmount: document.getElementById('settleAmount'),
       settleNotes: document.getElementById('settleNotes'),
 
+      // Settings Elements
+      paytmDelaySelector: document.getElementById('paytmDelaySelector'),
+      grantNotificationAccessBtn: document.getElementById('grantNotificationAccessBtn'),
+      grantOverlayAccessBtn: document.getElementById('grantOverlayAccessBtn'),
+      checkForUpdatesBtn: document.getElementById('checkForUpdatesBtn'),
+      appVersionDisplay: document.getElementById('appVersionDisplay'),
+      updateStatusNotice: document.getElementById('updateStatusNotice'),
+      updateModal: document.getElementById('updateModal'),
+      closeUpdateModalBtn: document.getElementById('closeUpdateModalBtn'),
+      updateVersionTitle: document.getElementById('updateVersionTitle'),
+      updateReleaseNotes: document.getElementById('updateReleaseNotes'),
+      downloadUpdateBtn: document.getElementById('downloadUpdateBtn'),
+
       exportDataBtn: document.getElementById('exportDataBtn'),
       importDataBtn: document.getElementById('importDataBtn'),
       importFileInput: document.getElementById('importFileInput'),
@@ -173,6 +186,78 @@ class WhoseTabApp {
 
   // ================= EVENT LISTENERS =================
   bindEvents() {
+    // Paytm Open Delay Setting
+    if (this.dom.paytmDelaySelector) {
+      // Sync from AndroidBridge or localStorage
+      let currentDelay = 0;
+      if (window.AndroidBridge && window.AndroidBridge.getOpenDelay) {
+        currentDelay = window.AndroidBridge.getOpenDelay();
+      } else {
+        currentDelay = parseInt(localStorage.getItem('whosetab_paytm_delay') || '0', 10);
+      }
+      this.dom.paytmDelaySelector.value = currentDelay.toString();
+
+      this.dom.paytmDelaySelector.addEventListener('change', (e) => {
+        const delayMs = parseInt(e.target.value, 10);
+        localStorage.setItem('whosetab_paytm_delay', delayMs.toString());
+        if (window.AndroidBridge && window.AndroidBridge.setOpenDelay) {
+          window.AndroidBridge.setOpenDelay(delayMs);
+        }
+      });
+    }
+
+    // Android Permissions Triggers
+    if (this.dom.grantNotificationAccessBtn) {
+      this.dom.grantNotificationAccessBtn.addEventListener('click', () => {
+        if (window.AndroidBridge && window.AndroidBridge.openNotificationAccessSettings) {
+          window.AndroidBridge.openNotificationAccessSettings();
+        } else {
+          alert('Notification listener settings are configured natively in the Android APK.');
+        }
+      });
+    }
+
+    if (this.dom.grantOverlayAccessBtn) {
+      this.dom.grantOverlayAccessBtn.addEventListener('click', () => {
+        if (window.AndroidBridge && window.AndroidBridge.openOverlayPermissionSettings) {
+          window.AndroidBridge.openOverlayPermissionSettings();
+        } else {
+          alert('Overlay ("Draw over other apps") settings are configured natively in the Android APK.');
+        }
+      });
+    }
+
+    // Check for Updates (GitHub Releases)
+    if (this.dom.checkForUpdatesBtn) {
+      this.dom.checkForUpdatesBtn.addEventListener('click', () => {
+        this.dom.updateStatusNotice.textContent = 'Checking GitHub for updates...';
+        if (window.AndroidBridge && window.AndroidBridge.checkForUpdates) {
+          window.AndroidBridge.checkForUpdates();
+        } else {
+          // Web fallback: fetch GitHub API directly
+          this.checkGitHubReleasesWeb();
+        }
+      });
+    }
+
+    if (this.dom.closeUpdateModalBtn) {
+      this.dom.closeUpdateModalBtn.addEventListener('click', () => {
+        this.dom.updateModal.classList.add('hidden');
+      });
+    }
+
+    if (this.dom.downloadUpdateBtn) {
+      this.dom.downloadUpdateBtn.addEventListener('click', () => {
+        const apkUrl = this.dom.downloadUpdateBtn.dataset.apkUrl;
+        if (window.AndroidBridge && window.AndroidBridge.downloadAndInstallUpdate) {
+          window.AndroidBridge.downloadAndInstallUpdate(apkUrl);
+        } else {
+          window.open(apkUrl, '_blank');
+        }
+        this.dom.updateModal.classList.add('hidden');
+      });
+    }
+
     // Theme toggle
     this.dom.themeQuickToggleBtn.addEventListener('click', () => this.toggleTheme());
     this.dom.themeSelector.addEventListener('change', (e) => this.setTheme(e.target.value));
@@ -273,6 +358,44 @@ class WhoseTabApp {
         this.saveLedger();
       }
     });
+  }
+
+  showUpdatePrompt(latestVersion, apkUrl, releaseNotes) {
+    if (this.dom.updateModal) {
+      this.dom.updateVersionTitle.textContent = `WhoseTab v${latestVersion}`;
+      this.dom.updateReleaseNotes.textContent = releaseNotes || 'Latest features & optimizations.';
+      this.dom.downloadUpdateBtn.dataset.apkUrl = apkUrl;
+      this.dom.updateModal.classList.remove('hidden');
+    }
+  }
+
+  onUpToDate() {
+    if (this.dom.updateStatusNotice) {
+      this.dom.updateStatusNotice.textContent = '✓ App is up to date with GitHub';
+    }
+  }
+
+  async checkGitHubReleasesWeb() {
+    try {
+      const res = await fetch('https://api.github.com/repos/KHILVANSH/WhoseTab/releases/latest');
+      if (!res.ok) {
+        this.dom.updateStatusNotice.textContent = 'Could not reach GitHub Releases API.';
+        return;
+      }
+      const data = await res.json();
+      const latestTag = (data.tag_name || '').replace('v', '').trim();
+      const assets = data.assets || [];
+      const apk = assets.find(a => a.name.endsWith('.apk'));
+
+      if (latestTag && apk) {
+        this.showUpdatePrompt(latestTag, apk.browser_download_url, data.body);
+        this.dom.updateStatusNotice.textContent = `New update found: v${latestTag}`;
+      } else {
+        this.onUpToDate();
+      }
+    } catch (e) {
+      this.dom.updateStatusNotice.textContent = 'Error checking GitHub updates.';
+    }
   }
 
   // ================= PAYTM DEEP LINK & CLIPBOARD =================

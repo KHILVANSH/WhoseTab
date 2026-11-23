@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Securely configures or updates your GitHub Personal Access Token (PAT) for the WhoseTab private repository.
 .DESCRIPTION
