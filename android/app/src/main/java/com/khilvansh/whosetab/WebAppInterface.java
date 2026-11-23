@@ -1,7 +1,6 @@
 package com.khilvansh.whosetab;
 
 import android.app.Activity;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -24,6 +23,12 @@ public class WebAppInterface {
         this.webView = webView;
     }
 
+    // --- SCANNER STATUS ---
+    @JavascriptInterface
+    public boolean isScannerRunning() {
+        return PaytmNotificationListenerService.isRunning() && isNotificationAccessGranted();
+    }
+
     // --- PAYTM OPEN DELAY SETTINGS ---
     @JavascriptInterface
     public long getOpenDelay() {
@@ -36,42 +41,7 @@ public class WebAppInterface {
         SharedPreferences prefs = activity.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit().putLong(PaytmNotificationListenerService.KEY_OPEN_DELAY, delayMs).apply();
         activity.runOnUiThread(() -> 
-            Toast.makeText(activity, "Paytm launch delay set to: " + (delayMs == 0 ? "Instant" : (delayMs / 1000.0) + "s"), Toast.LENGTH_SHORT).show()
-        );
-    }
-
-    // --- KEEP SCREEN ON / SCREEN AWAKE ---
-    @JavascriptInterface
-    public boolean isKeepScreenOn() {
-        SharedPreferences prefs = activity.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
-        return prefs.getBoolean("whosetab_keep_screen_on", true);
-    }
-
-    @JavascriptInterface
-    public void setKeepScreenOn(boolean enabled) {
-        SharedPreferences prefs = activity.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
-        prefs.edit().putBoolean("whosetab_keep_screen_on", enabled).apply();
-        if (activity instanceof MainActivity) {
-            ((MainActivity) activity).setKeepScreenOnEnabled(enabled);
-        }
-        activity.runOnUiThread(() -> 
-            Toast.makeText(activity, "Keep Screen Awake: " + (enabled ? "Enabled" : "Disabled"), Toast.LENGTH_SHORT).show()
-        );
-    }
-
-    // --- GITHUB TOKEN (FOR PRIVATE REPO UPDATES) ---
-    @JavascriptInterface
-    public String getGitHubToken() {
-        SharedPreferences prefs = activity.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
-        return prefs.getString("github_pat_token", "");
-    }
-
-    @JavascriptInterface
-    public void setGitHubToken(String token) {
-        SharedPreferences prefs = activity.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
-        prefs.edit().putString("github_pat_token", token != null ? token.trim() : "").apply();
-        activity.runOnUiThread(() -> 
-            Toast.makeText(activity, "GitHub Token saved for auto-updates", Toast.LENGTH_SHORT).show()
+            Toast.makeText(activity, "Paytm launch delay: " + (delayMs == 0 ? "Instant" : (delayMs / 1000.0) + "s"), Toast.LENGTH_SHORT).show()
         );
     }
 
@@ -113,7 +83,7 @@ public class WebAppInterface {
         }
     }
 
-    // --- GITHUB AUTO-UPDATE ---
+    // --- GITHUB AUTO-UPDATE (CLEAN & DIRECT) ---
     @JavascriptInterface
     public String getAppVersion() {
         return UpdateManager.getCurrentVersion(activity);
@@ -145,9 +115,10 @@ public class WebAppInterface {
 
             @Override
             public void onError(String errorMessage) {
-                activity.runOnUiThread(() -> 
-                    Toast.makeText(activity, "Update check: " + errorMessage, Toast.LENGTH_SHORT).show()
-                );
+                activity.runOnUiThread(() -> {
+                    Toast.makeText(activity, "Update check failed: " + errorMessage, Toast.LENGTH_SHORT).show();
+                    webView.evaluateJavascript("javascript:if(window.app && window.app.onUpdateError){ window.app.onUpdateError('" + errorMessage.replace("'", "\\'") + "'); }", null);
+                });
             }
         });
     }

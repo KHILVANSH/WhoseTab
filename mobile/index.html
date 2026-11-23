@@ -3,22 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0b0f19">
-  <meta name="description" content="Fast, offline peer expense tracker and Paytm payment logger for roommates and friends.">
-  <title>WhoseTab — Fast Offline Peer Expense Tracker</title>
+  <meta name="theme-color" content="#070a12">
+  <meta name="description" content="WhoseTab — Fast offline peer expense tracker and Paytm logger.">
+  <title>WhoseTab</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Safe Area Wrapper adhering to standard 16dp margins and 48dp touch targets -->
   <div class="mobile-viewport">
     
     <!-- Top Status Bar & App Header -->
     <header class="app-header">
       <div class="header-left">
-        <div class="brand-badge">⚡ WhoseTab</div>
-        <div class="status-offline" title="100% Offline & Private">
-          <span class="pulse-dot"></span> Offline Ready
+        <!-- Menacing Bold Typographic Logo -->
+        <h1 class="brand-logo">WHOSETAB</h1>
+        <!-- Live Payment Scanner Status Indicator -->
+        <div id="scannerStatusBadge" class="scanner-badge active" title="Background payment scanner status">
+          <span class="radar-dot"></span>
+          <span id="scannerStatusText" class="scanner-text">SCANNING FOR PAYMENTS</span>
         </div>
       </div>
       <button id="themeQuickToggleBtn" class="icon-btn" aria-label="Toggle Theme" title="Toggle Light/Dark Theme">
@@ -26,27 +28,27 @@
       </button>
     </header>
 
-    <!-- Detected Paytm Floating Alert (Clipboard or Intent) -->
+    <!-- Detected Paytm Floating Alert -->
     <section id="paytmNotificationBanner" class="paytm-banner hidden" role="alert">
-      <div class="banner-content">
+      <div class="banner-top">
         <div class="banner-icon">💳</div>
-        <div class="banner-text">
+        <div class="banner-info">
           <div class="banner-title">Paytm Payment Detected</div>
           <div class="banner-detail" id="paytmBannerDetail">Paid ₹0.00 to Merchant</div>
         </div>
       </div>
-      <div class="banner-actions">
-        <button id="paytmSnapBtn" class="btn btn-paytm-snap">Snap to Friend</button>
-        <button id="paytmDismissBtn" class="btn btn-ghost">Dismiss</button>
+      <div class="banner-buttons">
+        <button type="button" id="paytmSnapBtn" class="btn btn-paytm-action">⚡ Snap to Friend</button>
+        <button type="button" id="paytmDismissBtn" class="btn btn-paytm-dismiss">Dismiss</button>
       </div>
     </section>
 
     <!-- Main Views -->
     <main class="content-area">
       
-      <!-- TAB 1: LEDGER / DASHBOARD -->
+      <!-- TAB 1: DASHBOARD / LEDGER -->
       <section id="viewDashboard" class="tab-view active">
-        <!-- Balance Cards adhering to 8dp grid spacing -->
+        <!-- Balance Cards adhering to 8dp grid -->
         <div class="summary-cards-grid">
           <div class="card card-summary card-green">
             <span class="summary-label">You Are Owed</span>
@@ -60,25 +62,17 @@
           </div>
         </div>
 
-        <!-- Quick Paytm Simulation / Intent Tester for testing -->
-        <div class="paytm-test-strip">
-          <span class="test-label">Simulate Paytm:</span>
-          <button class="chip chip-test" data-amount="340" data-to="Sharma Kirana" data-category="Groceries">₹340 Groceries</button>
-          <button class="chip chip-test" data-amount="120" data-to="Campus Canteen" data-category="FoodDining">₹120 Canteen</button>
-          <button class="chip chip-test" data-amount="450" data-to="City Xerox" data-category="StationeryBooks">₹450 Xerox</button>
-        </div>
-
         <!-- Section: People Net Balances -->
         <div class="section-header">
-          <h2>Roommates & Friends</h2>
-          <button id="quickAddPersonBtn" class="btn-text">+ Add Person</button>
+          <h2>Friends & Roommates</h2>
+          <button type="button" id="quickAddPersonBtn" class="btn-text">+ Add Person</button>
         </div>
 
         <div id="peopleList" class="people-list">
           <!-- Populated dynamically via JS -->
         </div>
 
-        <!-- Section: Recent Snapped Purchases -->
+        <!-- Section: Recent Purchases -->
         <div class="section-header mt-4">
           <h2>Recent Purchases</h2>
           <span class="count-badge" id="expenseCountBadge">0</span>
@@ -89,20 +83,20 @@
         </div>
       </section>
 
-      <!-- TAB 2: PEOPLE & GROUPS -->
+      <!-- TAB 2: PEOPLE & CONTACTS -->
       <section id="viewPeople" class="tab-view">
         <div class="section-header">
           <h2>Contacts & Balances</h2>
-          <button id="addPersonPageBtn" class="btn btn-sm btn-primary">+ Add New</button>
+          <button type="button" id="addPersonPageBtn" class="btn btn-sm btn-primary">+ Add New</button>
         </div>
         <div class="filter-chips">
-          <button class="chip active" data-filter="all">All</button>
-          <button class="chip" data-filter="Roommate">Roommates</button>
-          <button class="chip" data-filter="Classmate">Classmates</button>
-          <button class="chip" data-filter="Friend">Friends</button>
+          <button type="button" class="chip active" data-filter="all">All</button>
+          <button type="button" class="chip" data-filter="Roommate">Roommates</button>
+          <button type="button" class="chip" data-filter="Classmate">Classmates</button>
+          <button type="button" class="chip" data-filter="Friend">Friends</button>
         </div>
         <div id="contactsFullList" class="contacts-grid mt-3">
-          <!-- Dynamic -->
+          <!-- Populated dynamically -->
         </div>
       </section>
 
@@ -111,24 +105,23 @@
         <h2>App Settings</h2>
         
         <div class="card settings-card mt-3">
-          <!-- Appearance Theme -->
+          <!-- Theme Setting: Only Dark and Light Mode -->
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">Appearance Theme</span>
-              <span class="setting-desc">Generic dark theme default or white mode</span>
+              <span class="setting-desc">Select dark or light application theme</span>
             </div>
             <select id="themeSelector" class="form-select">
-              <option value="system">System Default</option>
               <option value="dark" selected>Dark Theme (Default)</option>
-              <option value="light">White Mode (Light)</option>
+              <option value="light">Light Theme</option>
             </select>
           </div>
 
-          <!-- Paytm Open Delay (Instant vs Slight Delay) -->
+          <!-- Paytm Open Delay Setting -->
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">Paytm Open Delay</span>
-              <span class="setting-desc">Wait before auto-opening after Paytm payment</span>
+              <span class="setting-desc">Wait time before bringing WhoseTab to foreground</span>
             </div>
             <select id="paytmDelaySelector" class="form-select">
               <option value="0" selected>⚡ Instant (No Delay, 0s)</option>
@@ -139,143 +132,98 @@
             </select>
           </div>
 
-          <!-- Auto Detect Clipboard -->
+          <!-- Currency Display -->
           <div class="setting-item">
             <div class="setting-text">
-              <span class="setting-title">Clipboard Sniffer</span>
-              <span class="setting-desc">Detect copied Paytm transaction text on app switch</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="autoDetectClipboardToggle" checked>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <!-- Keep Screen Awake (Always On) -->
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Keep Screen Awake</span>
-              <span class="setting-desc">Prevent phone screen from turning off while working</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="keepScreenAwakeToggle" checked>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Currency Symbol</span>
-              <span class="setting-desc">Default symbol for balances and splits</span>
+              <span class="setting-title">Currency</span>
+              <span class="setting-desc">Base currency for calculations</span>
             </div>
             <span class="badge-pill">₹ (INR)</span>
           </div>
         </div>
 
-        <h3 class="mt-4">Android Background Permissions</h3>
+        <!-- Android Permissions for Payment Interception -->
+        <h3 class="mt-4">Background Scanner Permissions</h3>
         <div class="card settings-card mt-2">
-          <p class="text-secondary text-sm">
-            To automatically pop open WhoseTab right after paying in Paytm, Android requires these two permissions:
-          </p>
-
-          <div class="setting-item mt-2">
+          <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">1. Notification Access</span>
-              <span class="setting-desc">Reads "Paid ₹X to Y" from Paytm notification</span>
+              <span class="setting-desc">Intercepts payment confirmations from Paytm</span>
             </div>
-            <button id="grantNotificationAccessBtn" class="btn btn-sm btn-secondary">Grant Permission</button>
+            <button type="button" id="grantNotificationAccessBtn" class="btn btn-sm btn-secondary">Open Settings</button>
           </div>
 
           <div class="setting-item mt-2">
             <div class="setting-text">
               <span class="setting-title">2. Draw Over Other Apps</span>
-              <span class="setting-desc">Allows launching WhoseTab over Paytm</span>
+              <span class="setting-desc">Bypasses Android lock to open app over Paytm</span>
             </div>
-            <button id="grantOverlayAccessBtn" class="btn btn-sm btn-secondary">Grant Permission</button>
+            <button type="button" id="grantOverlayAccessBtn" class="btn btn-sm btn-secondary">Open Settings</button>
           </div>
         </div>
 
-        <h3 class="mt-4">Auto-Update from GitHub</h3>
+        <!-- Clean Updates Section -->
+        <h3 class="mt-4">Updates</h3>
         <div class="card settings-card mt-2">
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">WhoseTab Version</span>
-              <span class="setting-desc" id="appVersionDisplay">v1.0.0 (Release)</span>
+              <span class="setting-desc" id="appVersionDisplay">v1.0.0</span>
             </div>
-            <button id="checkForUpdatesBtn" class="btn btn-sm btn-primary">Check for Updates</button>
+            <button type="button" id="checkForUpdatesBtn" class="btn btn-sm btn-primary">Check for updates</button>
           </div>
-          <div id="updateStatusNotice" class="text-xs text-muted mt-1">Checks https://github.com/KHILVANSH/WhoseTab</div>
-
-          <div class="form-group mt-3">
-            <label for="githubPatInput" class="form-label">GitHub Token for Private Repo (Optional)</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="password" id="githubPatInput" class="form-input" placeholder="ghp_... (for private repo APK download)">
-              <button id="saveGithubPatBtn" class="btn btn-sm btn-secondary">Save</button>
-            </div>
-            <span class="text-xs text-muted">Required only to download updates from a private GitHub repo.</span>
-          </div>
+          <div id="updateStatusNotice" class="text-xs text-muted mt-1"></div>
         </div>
 
-        <h3 class="mt-4">Offline Data & Backup</h3>
+        <!-- Data & Backup -->
+        <h3 class="mt-4">Offline Data</h3>
         <div class="card settings-card mt-2">
           <p class="text-secondary text-sm">
-            All your data is saved strictly on your device storage without any external tracking. You can export or restore your ledger anytime.
+            All data is saved strictly on your device. Export or restore your ledger anytime.
           </p>
           <div class="action-buttons-row mt-3">
-            <button id="exportDataBtn" class="btn btn-secondary">Export JSON Backup</button>
-            <button id="importDataBtn" class="btn btn-secondary">Import JSON</button>
+            <button type="button" id="exportDataBtn" class="btn btn-secondary">Export JSON Backup</button>
+            <button type="button" id="importDataBtn" class="btn btn-secondary">Import JSON</button>
             <input type="file" id="importFileInput" accept=".json" style="display: none;">
           </div>
-          <button id="loadDemoDataBtn" class="btn btn-ghost mt-2">Load Demo Roommates & Expenses</button>
-          <button id="clearDataBtn" class="btn btn-danger-ghost mt-2">Reset All Data</button>
-        </div>
-
-        <h3 class="mt-4">Paytm Direct Integration Guide</h3>
-        <div class="card settings-card mt-2">
-          <p class="text-sm">
-            <strong>Deep Link URL:</strong> <code>whosetab://snap?amount=350&to=Aman&note=Groceries</code>
-          </p>
-          <p class="text-sm mt-1 text-secondary">
-            Use with Android Share Sheet: Share your Paytm receipt or payment confirmation SMS to WhoseTab to instantly auto-fill the amount and choose who it was for!
-          </p>
+          <button type="button" id="clearDataBtn" class="btn btn-danger-ghost mt-2">Reset All Data</button>
         </div>
       </section>
 
     </main>
 
     <!-- Floating Action Button (Snap Expense) -->
-    <button id="openSnapModalBtn" class="fab" aria-label="Snap New Expense" title="Snap New Expense">
+    <button type="button" id="openSnapModalBtn" class="fab" aria-label="Snap New Expense" title="Snap New Expense">
       <span class="fab-icon">+</span>
       <span class="fab-label">Snap Expense</span>
     </button>
 
-    <!-- Bottom Navigation Bar (48dp height minimum, thumb-friendly) -->
+    <!-- Bottom Navigation Bar -->
     <nav class="bottom-nav">
-      <button class="nav-item active" data-target="viewDashboard">
+      <button type="button" class="nav-item active" data-target="viewDashboard">
         <span class="nav-icon">📊</span>
         <span class="nav-label">Ledger</span>
       </button>
-      <button class="nav-item" data-target="viewPeople">
+      <button type="button" class="nav-item" data-target="viewPeople">
         <span class="nav-icon">👥</span>
         <span class="nav-label">People</span>
       </button>
-      <button class="nav-item" data-target="viewSettings">
+      <button type="button" class="nav-item" data-target="viewSettings">
         <span class="nav-icon">⚙️</span>
         <span class="nav-label">Settings</span>
       </button>
     </nav>
 
-    <!-- MODAL: SNAP / LOG EXPENSE (Quick 2-second picker) -->
+    <!-- MODAL: SNAP / LOG EXPENSE -->
     <div id="snapExpenseModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3 id="modalTitle">Snap Paytm Purchase</h3>
-          <button id="closeSnapModalBtn" class="btn-close" aria-label="Close">✕</button>
+          <h3 id="modalTitle">Snap Purchase</h3>
+          <button type="button" id="closeSnapModalBtn" class="btn-close" aria-label="Close">✕</button>
         </div>
 
         <form id="snapExpenseForm">
-          <!-- Amount Input with Large Display -->
           <div class="form-group">
             <label for="snapAmount" class="form-label">Amount Paid</label>
             <div class="amount-input-wrap">
@@ -284,13 +232,11 @@
             </div>
           </div>
 
-          <!-- Description / Merchant -->
           <div class="form-group">
             <label for="snapTitle" class="form-label">What was purchased?</label>
             <input type="text" id="snapTitle" class="form-input" placeholder="e.g. Milk & Bread, Canteen Lunch, Xerox">
           </div>
 
-          <!-- Category Quick Chips -->
           <div class="form-group">
             <label class="form-label">Category</label>
             <div class="category-chips">
@@ -303,18 +249,14 @@
             </div>
           </div>
 
-          <!-- Who was this for? (Single tap selection) -->
           <div class="form-group">
             <div class="label-row">
               <label class="form-label">Whose stuff did you buy?</label>
-              <span class="text-xs text-muted">Tap to select</span>
+              <span class="text-xs text-muted">Tap contact to select</span>
             </div>
-            <div id="modalPeopleChips" class="people-chips-grid">
-              <!-- Dynamically populated -->
-            </div>
+            <div id="modalPeopleChips" class="people-chips-grid"></div>
           </div>
 
-          <!-- Split Mode -->
           <div class="form-group">
             <label class="form-label">Split Method</label>
             <div class="split-toggle-group">
@@ -341,12 +283,12 @@
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3>Add New Contact</h3>
-          <button id="closeAddPersonModalBtn" class="btn-close">✕</button>
+          <h3>Add Contact</h3>
+          <button type="button" id="closeAddPersonModalBtn" class="btn-close">✕</button>
         </div>
         <form id="addPersonForm">
           <div class="form-group">
-            <label for="personName" class="form-label">Full Name</label>
+            <label for="personName" class="form-label">Name</label>
             <input type="text" id="personName" class="form-input" placeholder="e.g. Aman, Priya, Rohit" required>
           </div>
           <div class="form-group">
@@ -359,7 +301,7 @@
           </div>
           <div class="form-group">
             <label for="personUpi" class="form-label">Paytm / UPI ID (Optional)</label>
-            <input type="text" id="personUpi" class="form-input" placeholder="username@paytm">
+            <input type="text" id="personUpi" class="form-input" placeholder="name@paytm">
           </div>
           <div class="modal-footer">
             <button type="submit" class="btn btn-primary btn-block btn-lg">Add Contact</button>
@@ -374,12 +316,10 @@
         <div class="sheet-handle"></div>
         <div class="modal-header">
           <h3>Settle Up</h3>
-          <button id="closeSettleModalBtn" class="btn-close">✕</button>
+          <button type="button" id="closeSettleModalBtn" class="btn-close">✕</button>
         </div>
         <form id="settleForm">
-          <div class="settle-person-info" id="settlePersonInfo">
-            <!-- Dynamic -->
-          </div>
+          <div class="settle-person-info" id="settlePersonInfo"></div>
           <div class="form-group mt-3">
             <label for="settleAmount" class="form-label">Settlement Amount (₹)</label>
             <input type="number" id="settleAmount" class="form-input input-lg" step="any" required>
@@ -395,19 +335,19 @@
       </div>
     </div>
 
-    <!-- MODAL: GITHUB UPDATE AVAILABLE -->
+    <!-- MODAL: UPDATE AVAILABLE -->
     <div id="updateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3>⚡ New Update Available!</h3>
-          <button id="closeUpdateModalBtn" class="btn-close">✕</button>
+          <h3>⚡ Update Available</h3>
+          <button type="button" id="closeUpdateModalBtn" class="btn-close">✕</button>
         </div>
         <div class="p-2">
-          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.1.0</div>
-          <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Changelog and improvements</div>
+          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.0.1</div>
+          <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Bug fixes and improvements</div>
           <div class="modal-footer mt-4">
-            <button id="downloadUpdateBtn" class="btn btn-primary btn-block btn-lg">Download & Install Update</button>
+            <button type="button" id="downloadUpdateBtn" class="btn btn-primary btn-block btn-lg">Download & Install</button>
           </div>
         </div>
       </div>

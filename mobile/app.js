@@ -1,45 +1,10 @@
 /**
  * WhoseTab — Mobile Application Logic
- * Offline-first, fast peer expense & Paytm logger for roommates & friends.
+ * Offline-first peer expense manager & background Paytm payment sniffer.
  */
 
 const STORAGE_KEY = 'whosetab_ledger_v1';
 const THEME_KEY = 'whosetab_theme_preference';
-
-// Default Demo Contacts
-const DEFAULT_PEOPLE = [
-  { id: 'p1', name: 'Aman Verma', relationship: 'Roommate', upi: 'aman@paytm', createdAt: new Date().toISOString() },
-  { id: 'p2', name: 'Kabir Mehta', relationship: 'Roommate', upi: 'kabir@upi', createdAt: new Date().toISOString() },
-  { id: 'p3', name: 'Sneha Patel', relationship: 'Classmate', upi: '', createdAt: new Date().toISOString() },
-  { id: 'p4', name: 'Rohan Gupta', relationship: 'Friend', upi: '', createdAt: new Date().toISOString() }
-];
-
-const DEFAULT_EXPENSES = [
-  {
-    id: 'e1',
-    title: 'Monthly Flat Wifi Bill',
-    totalAmount: 600,
-    paidById: 'me',
-    splitType: 'BoughtForPerson',
-    splits: [{ personId: 'p1', amountOwed: 300 }, { personId: 'p2', amountOwed: 300 }],
-    category: 'RoomRentUtilities',
-    paymentSource: 'Paytm',
-    date: new Date(Date.now() - 86400000 * 2).toISOString(),
-    paytmRef: 'PT928174'
-  },
-  {
-    id: 'e2',
-    title: 'Lab Manual & Spiral Binding',
-    totalAmount: 180,
-    paidById: 'me',
-    splitType: 'BoughtForPerson',
-    splits: [{ personId: 'p3', amountOwed: 180 }],
-    category: 'StationeryBooks',
-    paymentSource: 'Paytm',
-    date: new Date(Date.now() - 86400000).toISOString(),
-    paytmRef: 'PT102948'
-  }
-];
 
 class WhoseTabApp {
   constructor() {
@@ -51,6 +16,7 @@ class WhoseTabApp {
     this.initElements();
     this.initTheme();
     this.bindEvents();
+    this.checkScannerStatus();
     this.checkUrlParameters();
     this.render();
   }
@@ -58,19 +24,23 @@ class WhoseTabApp {
   loadLedger() {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
-      if (data) return JSON.parse(data);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (parsed && Array.isArray(parsed.people)) {
+          return parsed;
+        }
+      }
     } catch (e) {
       console.warn('Could not read from localStorage', e);
     }
-    // Return initial default ledger
+    // Clean initial ledger without dummy data
     return {
       version: 1,
-      people: DEFAULT_PEOPLE,
-      expenses: DEFAULT_EXPENSES,
+      people: [],
+      expenses: [],
       settlements: [],
       settings: {
-        theme: 'dark',
-        autoDetectClipboard: true
+        theme: 'dark'
       }
     };
   }
@@ -88,8 +58,11 @@ class WhoseTabApp {
     this.dom = {
       themeQuickToggleBtn: document.getElementById('themeQuickToggleBtn'),
       themeSelector: document.getElementById('themeSelector'),
-      autoDetectClipboardToggle: document.getElementById('autoDetectClipboardToggle'),
+      paytmDelaySelector: document.getElementById('paytmDelaySelector'),
       
+      scannerStatusBadge: document.getElementById('scannerStatusBadge'),
+      scannerStatusText: document.getElementById('scannerStatusText'),
+
       paytmNotificationBanner: document.getElementById('paytmNotificationBanner'),
       paytmBannerDetail: document.getElementById('paytmBannerDetail'),
       paytmSnapBtn: document.getElementById('paytmSnapBtn'),
@@ -129,13 +102,9 @@ class WhoseTabApp {
       settleAmount: document.getElementById('settleAmount'),
       settleNotes: document.getElementById('settleNotes'),
 
-      // Settings Elements
-      paytmDelaySelector: document.getElementById('paytmDelaySelector'),
-      keepScreenAwakeToggle: document.getElementById('keepScreenAwakeToggle'),
-      githubPatInput: document.getElementById('githubPatInput'),
-      saveGithubPatBtn: document.getElementById('saveGithubPatBtn'),
       grantNotificationAccessBtn: document.getElementById('grantNotificationAccessBtn'),
       grantOverlayAccessBtn: document.getElementById('grantOverlayAccessBtn'),
+
       checkForUpdatesBtn: document.getElementById('checkForUpdatesBtn'),
       appVersionDisplay: document.getElementById('appVersionDisplay'),
       updateStatusNotice: document.getElementById('updateStatusNotice'),
@@ -148,14 +117,13 @@ class WhoseTabApp {
       exportDataBtn: document.getElementById('exportDataBtn'),
       importDataBtn: document.getElementById('importDataBtn'),
       importFileInput: document.getElementById('importFileInput'),
-      loadDemoDataBtn: document.getElementById('loadDemoDataBtn'),
       clearDataBtn: document.getElementById('clearDataBtn'),
     };
   }
 
-  // ================= THEME CONTROLLER =================
+  // ================= THEME CONTROLLER (DARK & LIGHT ONLY) =================
   initTheme() {
-    const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
+    const savedTheme = localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark';
     this.setTheme(savedTheme, false);
     if (this.dom.themeSelector) {
       this.dom.themeSelector.value = savedTheme;
@@ -163,18 +131,14 @@ class WhoseTabApp {
   }
 
   setTheme(theme, save = true) {
-    let activeTheme = theme;
-    if (theme === 'system') {
-      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      activeTheme = isDark ? 'dark' : 'light';
-    }
+    const activeTheme = theme === 'light' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', activeTheme);
     const themeIcon = document.querySelector('.theme-icon');
     if (themeIcon) {
       themeIcon.textContent = activeTheme === 'dark' ? '🌙' : '☀️';
     }
     if (save) {
-      localStorage.setItem(THEME_KEY, theme);
+      localStorage.setItem(THEME_KEY, activeTheme);
     }
   }
 
@@ -187,11 +151,43 @@ class WhoseTabApp {
     }
   }
 
+  // ================= SCANNER STATUS IN NAVBAR =================
+  checkScannerStatus() {
+    let isRunning = false;
+    if (window.AndroidBridge && window.AndroidBridge.isScannerRunning) {
+      isRunning = window.AndroidBridge.isScannerRunning();
+    } else {
+      isRunning = true; // Web / standalone default
+    }
+
+    if (this.dom.scannerStatusBadge && this.dom.scannerStatusText) {
+      if (isRunning) {
+        this.dom.scannerStatusBadge.className = 'scanner-badge active';
+        this.dom.scannerStatusText.textContent = 'SCANNING FOR PAYMENTS';
+      } else {
+        this.dom.scannerStatusBadge.className = 'scanner-badge inactive';
+        this.dom.scannerStatusText.textContent = '⚠️ SCANNER PAUSED - TAP TO ACTIVATE';
+      }
+    }
+  }
+
   // ================= EVENT LISTENERS =================
   bindEvents() {
+    // Theme toggle
+    this.dom.themeQuickToggleBtn.addEventListener('click', () => this.toggleTheme());
+    this.dom.themeSelector.addEventListener('change', (e) => this.setTheme(e.target.value));
+
+    // Scanner status badge click: opens notification access settings if paused
+    if (this.dom.scannerStatusBadge) {
+      this.dom.scannerStatusBadge.addEventListener('click', () => {
+        if (window.AndroidBridge && window.AndroidBridge.openNotificationAccessSettings) {
+          window.AndroidBridge.openNotificationAccessSettings();
+        }
+      });
+    }
+
     // Paytm Open Delay Setting
     if (this.dom.paytmDelaySelector) {
-      // Sync from AndroidBridge or localStorage
       let currentDelay = 0;
       if (window.AndroidBridge && window.AndroidBridge.getOpenDelay) {
         currentDelay = window.AndroidBridge.getOpenDelay();
@@ -209,51 +205,11 @@ class WhoseTabApp {
       });
     }
 
-    // Keep Screen Awake Toggle
-    if (this.dom.keepScreenAwakeToggle) {
-      let isAwake = true;
-      if (window.AndroidBridge && window.AndroidBridge.isKeepScreenOn) {
-        isAwake = window.AndroidBridge.isKeepScreenOn();
-      } else {
-        isAwake = localStorage.getItem('whosetab_keep_screen_on') !== 'false';
-      }
-      this.dom.keepScreenAwakeToggle.checked = isAwake;
-
-      this.dom.keepScreenAwakeToggle.addEventListener('change', (e) => {
-        const enabled = e.target.checked;
-        localStorage.setItem('whosetab_keep_screen_on', enabled.toString());
-        if (window.AndroidBridge && window.AndroidBridge.setKeepScreenOn) {
-          window.AndroidBridge.setKeepScreenOn(enabled);
-        }
-      });
-    }
-
-    // GitHub PAT configuration for updates
-    if (this.dom.githubPatInput && this.dom.saveGithubPatBtn) {
-      if (window.AndroidBridge && window.AndroidBridge.getGitHubToken) {
-        this.dom.githubPatInput.value = window.AndroidBridge.getGitHubToken() || '';
-      } else {
-        this.dom.githubPatInput.value = localStorage.getItem('whosetab_github_pat') || '';
-      }
-
-      this.dom.saveGithubPatBtn.addEventListener('click', () => {
-        const val = this.dom.githubPatInput.value.trim();
-        localStorage.setItem('whosetab_github_pat', val);
-        if (window.AndroidBridge && window.AndroidBridge.setGitHubToken) {
-          window.AndroidBridge.setGitHubToken(val);
-        } else {
-          alert('Token saved locally.');
-        }
-      });
-    }
-
     // Android Permissions Triggers
     if (this.dom.grantNotificationAccessBtn) {
       this.dom.grantNotificationAccessBtn.addEventListener('click', () => {
         if (window.AndroidBridge && window.AndroidBridge.openNotificationAccessSettings) {
           window.AndroidBridge.openNotificationAccessSettings();
-        } else {
-          alert('Notification listener settings are configured natively in the Android APK.');
         }
       });
     }
@@ -262,20 +218,35 @@ class WhoseTabApp {
       this.dom.grantOverlayAccessBtn.addEventListener('click', () => {
         if (window.AndroidBridge && window.AndroidBridge.openOverlayPermissionSettings) {
           window.AndroidBridge.openOverlayPermissionSettings();
-        } else {
-          alert('Overlay ("Draw over other apps") settings are configured natively in the Android APK.');
         }
       });
     }
 
-    // Check for Updates (GitHub Releases)
+    // Fixed Paytm Snap & Dismiss Buttons
+    if (this.dom.paytmSnapBtn) {
+      this.dom.paytmSnapBtn.addEventListener('click', () => {
+        if (this.detectedPaytmData) {
+          const data = this.detectedPaytmData;
+          this.dom.paytmNotificationBanner.classList.add('hidden');
+          this.openSnapModalWithPaytm(data);
+        }
+      });
+    }
+
+    if (this.dom.paytmDismissBtn) {
+      this.dom.paytmDismissBtn.addEventListener('click', () => {
+        this.detectedPaytmData = null;
+        this.dom.paytmNotificationBanner.classList.add('hidden');
+      });
+    }
+
+    // Check for Updates (Direct GitHub Releases, no tokens needed)
     if (this.dom.checkForUpdatesBtn) {
       this.dom.checkForUpdatesBtn.addEventListener('click', () => {
-        this.dom.updateStatusNotice.textContent = 'Checking GitHub for updates...';
+        this.dom.updateStatusNotice.textContent = 'Checking for updates...';
         if (window.AndroidBridge && window.AndroidBridge.checkForUpdates) {
           window.AndroidBridge.checkForUpdates();
         } else {
-          // Web fallback: fetch GitHub API directly
           this.checkGitHubReleasesWeb();
         }
       });
@@ -298,10 +269,6 @@ class WhoseTabApp {
         this.dom.updateModal.classList.add('hidden');
       });
     }
-
-    // Theme toggle
-    this.dom.themeQuickToggleBtn.addEventListener('click', () => this.toggleTheme());
-    this.dom.themeSelector.addEventListener('change', (e) => this.setTheme(e.target.value));
 
     // Bottom Navigation
     this.dom.navItems.forEach(item => {
@@ -352,91 +319,22 @@ class WhoseTabApp {
     this.dom.addPersonForm.addEventListener('submit', (e) => this.handleAddPersonSubmit(e));
     this.dom.settleForm.addEventListener('submit', (e) => this.handleSettleSubmit(e));
 
-    // Paytm Simulation Chips
-    document.querySelectorAll('.chip-test').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const amt = btn.dataset.amount;
-        const to = btn.dataset.to;
-        const cat = btn.dataset.category;
-        this.showPaytmDetectedBanner({
-          amount: parseFloat(amt),
-          recipient: to,
-          suggestedCategory: cat,
-          rawText: `Paid ₹${amt} to ${to} successfully via Paytm`
-        });
-      });
+    // Window focus: check clipboard and re-check scanner status
+    window.addEventListener('focus', () => {
+      this.checkScannerStatus();
+      this.checkClipboardForPaytm();
     });
-
-    // Paytm Banner actions
-    this.dom.paytmSnapBtn.addEventListener('click', () => {
-      if (this.detectedPaytmData) {
-        this.openSnapModalWithPaytm(this.detectedPaytmData);
-        this.dom.paytmNotificationBanner.classList.add('hidden');
-      }
-    });
-    this.dom.paytmDismissBtn.addEventListener('click', () => {
-      this.dom.paytmNotificationBanner.classList.add('hidden');
-    });
-
-    // Window focus / clipboard listener
-    window.addEventListener('focus', () => this.checkClipboardForPaytm());
 
     // Backup & Restore
     this.dom.exportDataBtn.addEventListener('click', () => this.exportBackup());
     this.dom.importDataBtn.addEventListener('click', () => this.dom.importFileInput.click());
     this.dom.importFileInput.addEventListener('change', (e) => this.importBackup(e));
-    this.dom.loadDemoDataBtn.addEventListener('click', () => {
-      if (confirm('Load demo roommates, classmates, and expenses?')) {
-        this.ledger.people = DEFAULT_PEOPLE;
-        this.ledger.expenses = DEFAULT_EXPENSES;
-        this.ledger.settlements = [];
-        this.saveLedger();
-      }
-    });
     this.dom.clearDataBtn.addEventListener('click', () => {
       if (confirm('Are you sure you want to reset all data? This cannot be undone.')) {
         this.ledger = { version: 1, people: [], expenses: [], settlements: [], settings: {} };
         this.saveLedger();
       }
     });
-  }
-
-  showUpdatePrompt(latestVersion, apkUrl, releaseNotes) {
-    if (this.dom.updateModal) {
-      this.dom.updateVersionTitle.textContent = `WhoseTab v${latestVersion}`;
-      this.dom.updateReleaseNotes.textContent = releaseNotes || 'Latest features & optimizations.';
-      this.dom.downloadUpdateBtn.dataset.apkUrl = apkUrl;
-      this.dom.updateModal.classList.remove('hidden');
-    }
-  }
-
-  onUpToDate() {
-    if (this.dom.updateStatusNotice) {
-      this.dom.updateStatusNotice.textContent = '✓ App is up to date with GitHub';
-    }
-  }
-
-  async checkGitHubReleasesWeb() {
-    try {
-      const res = await fetch('https://api.github.com/repos/KHILVANSH/WhoseTab/releases/latest');
-      if (!res.ok) {
-        this.dom.updateStatusNotice.textContent = 'Could not reach GitHub Releases API.';
-        return;
-      }
-      const data = await res.json();
-      const latestTag = (data.tag_name || '').replace('v', '').trim();
-      const assets = data.assets || [];
-      const apk = assets.find(a => a.name.endsWith('.apk'));
-
-      if (latestTag && apk) {
-        this.showUpdatePrompt(latestTag, apk.browser_download_url, data.body);
-        this.dom.updateStatusNotice.textContent = `New update found: v${latestTag}`;
-      } else {
-        this.onUpToDate();
-      }
-    } catch (e) {
-      this.dom.updateStatusNotice.textContent = 'Error checking GitHub updates.';
-    }
   }
 
   // ================= PAYTM DEEP LINK & CLIPBOARD =================
@@ -466,9 +364,7 @@ class WhoseTabApp {
       if (parsed) {
         this.showPaytmDetectedBanner(parsed);
       }
-    } catch (e) {
-      // Clipboard access not granted or not available
-    }
+    } catch (e) {}
   }
 
   parsePaytmString(text) {
@@ -514,7 +410,6 @@ class WhoseTabApp {
     this.dom.snapAmount.value = data.amount || '';
     this.dom.snapTitle.value = data.recipient ? `${data.recipient}` : 'Paytm Expense';
     
-    // Auto-select category
     if (data.suggestedCategory) {
       const radio = document.querySelector(`input[name="category"][value="${data.suggestedCategory}"]`);
       if (radio) radio.checked = true;
@@ -531,7 +426,7 @@ class WhoseTabApp {
   renderModalPeopleChips() {
     this.dom.modalPeopleChips.innerHTML = '';
     if (this.ledger.people.length === 0) {
-      this.dom.modalPeopleChips.innerHTML = '<span class="text-xs text-muted">No contacts yet. Tap "+ Add Person" first!</span>';
+      this.dom.modalPeopleChips.innerHTML = '<div class="text-xs text-muted py-2">No contacts saved yet. Tap "+ Add Person" to create your first contact!</div>';
       return;
     }
 
@@ -554,7 +449,6 @@ class WhoseTabApp {
     const balances = {};
     this.ledger.people.forEach(p => balances[p.id] = 0);
 
-    // Process Expenses (User paid)
     this.ledger.expenses.forEach(exp => {
       if (exp.paidById === 'me') {
         exp.splits.forEach(split => {
@@ -565,14 +459,12 @@ class WhoseTabApp {
       }
     });
 
-    // Process Settlements (Person paid user)
     this.ledger.settlements.forEach(s => {
       if (s.toPersonId === 'me') {
         balances[s.fromPersonId] = (balances[s.fromPersonId] || 0) - s.amount;
       }
     });
 
-    // Rounding
     Object.keys(balances).forEach(k => {
       balances[k] = Math.round(balances[k] * 100) / 100;
     });
@@ -609,7 +501,7 @@ class WhoseTabApp {
       category,
       paymentSource: 'Paytm',
       date: new Date().toISOString(),
-      paytmRef: this.detectedPaytmData?.rawText ? 'Paytm Intent' : null
+      paytmRef: this.detectedPaytmData?.rawText ? 'Paytm Payment' : null
     };
 
     this.ledger.expenses.unshift(newExpense);
@@ -687,6 +579,51 @@ class WhoseTabApp {
     this.dom.settleModal.classList.add('hidden');
   }
 
+  // ================= AUTO-UPDATE (GITHUB PUBLIC RELEASES) =================
+  showUpdatePrompt(latestVersion, apkUrl, releaseNotes) {
+    if (this.dom.updateModal) {
+      this.dom.updateVersionTitle.textContent = `WhoseTab v${latestVersion}`;
+      this.dom.updateReleaseNotes.textContent = releaseNotes || 'Latest features & optimizations.';
+      this.dom.downloadUpdateBtn.dataset.apkUrl = apkUrl;
+      this.dom.updateModal.classList.remove('hidden');
+    }
+  }
+
+  onUpToDate() {
+    if (this.dom.updateStatusNotice) {
+      this.dom.updateStatusNotice.textContent = '✓ App is up to date';
+    }
+  }
+
+  onUpdateError(err) {
+    if (this.dom.updateStatusNotice) {
+      this.dom.updateStatusNotice.textContent = 'Update check: ' + err;
+    }
+  }
+
+  async checkGitHubReleasesWeb() {
+    try {
+      const res = await fetch('https://api.github.com/repos/KHILVANSH/WhoseTab/releases/latest');
+      if (!res.ok) {
+        this.dom.updateStatusNotice.textContent = 'Could not reach updates server.';
+        return;
+      }
+      const data = await res.json();
+      const latestTag = (data.tag_name || '').replace('v', '').trim();
+      const assets = data.assets || [];
+      const apk = assets.find(a => a.name.endsWith('.apk'));
+
+      if (latestTag && apk) {
+        this.showUpdatePrompt(latestTag, apk.browser_download_url, data.body);
+        this.dom.updateStatusNotice.textContent = `New update found: v${latestTag}`;
+      } else {
+        this.onUpToDate();
+      }
+    } catch (e) {
+      this.dom.updateStatusNotice.textContent = 'Error checking for updates.';
+    }
+  }
+
   // ================= BACKUP & EXPORT =================
   exportBackup() {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(this.ledger, null, 2));
@@ -739,10 +676,10 @@ class WhoseTabApp {
     this.dom.activeDebtorsCount.textContent = `${debtors} people owe you`;
     this.dom.expenseCountBadge.textContent = this.ledger.expenses.length;
 
-    // Render People List with Net Balances
+    // Render People List
     this.dom.peopleList.innerHTML = '';
     if (this.ledger.people.length === 0) {
-      this.dom.peopleList.innerHTML = '<div class="text-sm text-muted text-center py-3">No contacts added yet. Tap "+ Add Person" to get started!</div>';
+      this.dom.peopleList.innerHTML = '<div class="text-sm text-muted text-center py-3">No contacts saved yet. Tap "+ Add Person" to get started!</div>';
     } else {
       this.ledger.people.forEach(p => {
         const bal = balances[p.id] || 0;
@@ -765,7 +702,7 @@ class WhoseTabApp {
               </span>
               <span class="balance-label">${bal > 0 ? 'Owes You' : bal < 0 ? 'You Owe' : 'Settled'}</span>
             </div>
-            ${bal > 0 ? `<button class="btn-settle" data-id="${p.id}">Settle</button>` : ''}
+            ${bal > 0 ? `<button type="button" class="btn-settle" data-id="${p.id}">Settle</button>` : ''}
           </div>
         `;
 
@@ -781,9 +718,9 @@ class WhoseTabApp {
     // Render Recent Expenses
     this.dom.recentExpensesList.innerHTML = '';
     if (this.ledger.expenses.length === 0) {
-      this.dom.recentExpensesList.innerHTML = '<div class="text-sm text-muted text-center py-3">No purchases logged yet. Tap "Snap Expense" below!</div>';
+      this.dom.recentExpensesList.innerHTML = '<div class="text-sm text-muted text-center py-3">No purchases logged yet. Make a payment on Paytm or tap + Snap Expense below!</div>';
     } else {
-      this.ledger.expenses.slice(0, 8).forEach(exp => {
+      this.ledger.expenses.slice(0, 10).forEach(exp => {
         const catIcons = {
           Groceries: '🥦', FoodDining: '🍛', SnacksChai: '☕',
           StationeryBooks: '📚', RoomRentUtilities: '💡', General: '📦'
@@ -791,7 +728,6 @@ class WhoseTabApp {
         const icon = catIcons[exp.category] || '📦';
         const dateStr = new Date(exp.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
         
-        // Find participant name
         const participantNames = exp.splits.map(s => {
           const p = this.ledger.people.find(person => person.id === s.personId);
           return p ? p.name.split(' ')[0] : 'Someone';
@@ -807,7 +743,6 @@ class WhoseTabApp {
               <span>For: <strong>${participantNames}</strong></span>
               <span>•</span>
               <span>${dateStr}</span>
-              ${exp.paymentSource === 'Paytm' ? '<span class="badge-paytm-tag">Paytm</span>' : ''}
             </div>
           </div>
           <div class="exp-amount">₹${exp.totalAmount.toFixed(2)}</div>
@@ -826,7 +761,7 @@ class WhoseTabApp {
       : this.ledger.people.filter(p => p.relationship === this.currentFilter);
 
     if (filtered.length === 0) {
-      this.dom.contactsFullList.innerHTML = '<div class="text-sm text-muted text-center py-4">No contacts found in this filter.</div>';
+      this.dom.contactsFullList.innerHTML = '<div class="text-sm text-muted text-center py-4">No contacts found in this list.</div>';
       return;
     }
 
@@ -851,7 +786,7 @@ class WhoseTabApp {
             </span>
             <span class="balance-label">${bal > 0 ? 'Owes you' : 'Settled'}</span>
           </div>
-          <button class="btn btn-sm btn-secondary snap-for-person-btn" data-id="${p.id}">Snap</button>
+          <button type="button" class="btn btn-sm btn-secondary snap-for-person-btn" data-id="${p.id}">Snap</button>
         </div>
       `;
 

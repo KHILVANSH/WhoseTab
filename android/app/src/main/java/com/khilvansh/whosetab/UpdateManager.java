@@ -1,6 +1,5 @@
 package com.khilvansh.whosetab;
 
-import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -43,9 +42,7 @@ public class UpdateManager {
             try {
                 checkForUpdates(context, new UpdateCheckCallback() {
                     @Override
-                    public void onUpdateFound(String latestVersion, String apkUrl, String releaseNotes) {
-                        // Notify via toast or callback
-                    }
+                    public void onUpdateFound(String latestVersion, String apkUrl, String releaseNotes) {}
                     @Override
                     public void onUpToDate(String currentVersion) {}
                     @Override
@@ -62,19 +59,13 @@ public class UpdateManager {
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
                 conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
-
-                // If private repo token is stored, use it for authorization
-                android.content.SharedPreferences prefs = context.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
-                String token = prefs.getString("github_pat_token", "");
-                if (token != null && !token.trim().isEmpty()) {
-                    conn.setRequestProperty("Authorization", "Bearer " + token.trim());
-                }
-
+                conn.setRequestProperty("User-Agent", "WhoseTab-App");
                 conn.setConnectTimeout(8000);
                 conn.setReadTimeout(8000);
 
-                if (conn.getResponseCode() != 200) {
-                    callback.onError("GitHub API returned: " + conn.getResponseCode());
+                int respCode = conn.getResponseCode();
+                if (respCode != 200) {
+                    callback.onError("GitHub returned HTTP " + respCode);
                     return;
                 }
 
@@ -87,7 +78,7 @@ public class UpdateManager {
 
                 JSONObject release = new JSONObject(jsonText.toString());
                 String tagName = release.optString("tag_name", "").replace("v", "").trim();
-                String releaseNotes = release.optString("body", "Bug fixes and improvements.");
+                String releaseNotes = release.optString("body", "Bug fixes and performance improvements.");
                 JSONArray assets = release.optJSONArray("assets");
 
                 String apkDownloadUrl = null;
@@ -110,18 +101,18 @@ public class UpdateManager {
                 }
 
             } catch (Exception e) {
-                callback.onError(e.getMessage() != null ? e.getMessage() : "Failed to check updates");
+                callback.onError(e.getMessage() != null ? e.getMessage() : "Failed to connect to GitHub");
             }
         }).start();
     }
 
     public static void downloadAndInstallApk(Context context, String apkUrl) {
-        Toast.makeText(context, "Downloading update from GitHub...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(context, "Downloading WhoseTab update...", Toast.LENGTH_SHORT).show();
 
         try {
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(apkUrl));
             request.setTitle("WhoseTab Update");
-            request.setDescription("Downloading latest release APK from GitHub");
+            request.setDescription("Downloading latest release APK");
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             request.setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, "WhoseTab-latest.apk");
 
