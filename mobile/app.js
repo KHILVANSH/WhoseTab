@@ -187,7 +187,7 @@ class WhoseTabApp {
           }
         } catch (e) {}
       }
-      this.dom.appVersionDisplay.textContent = 'v1.0.6';
+      this.dom.appVersionDisplay.textContent = 'v1.0.7';
     }
   }
 
@@ -216,10 +216,10 @@ class WhoseTabApp {
     if (this.dom.scannerStatusBadge && this.dom.scannerStatusText) {
       if (isRunning && notifGranted && overlayGranted) {
         this.dom.scannerStatusBadge.className = 'scanner-badge active';
-        this.dom.scannerStatusText.textContent = 'SCANNING FOR PAYMENTS';
+        this.dom.scannerStatusText.textContent = 'Scanner active';
       } else {
         this.dom.scannerStatusBadge.className = 'scanner-badge inactive';
-        this.dom.scannerStatusText.textContent = '⚠️ SCANNER PAUSED - TAP TO SETUP';
+        this.dom.scannerStatusText.textContent = 'Scanner inactive — Tap to setup';
       }
     }
   }
@@ -246,10 +246,10 @@ class WhoseTabApp {
 
     if (this.dom.completeSetupBtn) {
       if (notifGranted && overlayGranted) {
-        this.dom.completeSetupBtn.textContent = '🎉 All Set — Let\'s Go!';
+        this.dom.completeSetupBtn.textContent = 'Get Started';
         this.dom.completeSetupBtn.className = 'btn btn-success btn-block btn-lg';
       } else {
-        this.dom.completeSetupBtn.textContent = 'Continue to WhoseTab';
+        this.dom.completeSetupBtn.textContent = 'Continue';
         this.dom.completeSetupBtn.className = 'btn btn-primary btn-block btn-lg';
       }
     }
@@ -267,7 +267,7 @@ class WhoseTabApp {
     
     if (sBtn) {
       if (isGranted) {
-        sBtn.textContent = '✅ Granted';
+        sBtn.textContent = 'Granted';
         sBtn.className = 'btn btn-sm btn-success setup-action-btn granted';
         sBtn.disabled = true;
       } else {
@@ -279,7 +279,7 @@ class WhoseTabApp {
 
     if (setBtn) {
       if (isGranted) {
-        setBtn.textContent = '✅ Granted';
+        setBtn.textContent = 'Granted';
         setBtn.className = 'btn btn-sm btn-success granted';
         setBtn.disabled = true;
       } else {
@@ -557,7 +557,7 @@ class WhoseTabApp {
         const total = parseFloat(this.dom.snapAmount.value) || 0;
         const numFriends = this.selectedPersonIds.size;
         if (numFriends === 0) {
-          this.showSnapError('⚠️ Please select at least one friend above first to split evenly.');
+          this.showSnapError('Please select at least one friend above first to split equally.');
           return;
         }
         this.manualSplits.clear();
@@ -882,24 +882,19 @@ class WhoseTabApp {
       const row = this.dom.summaryBreakdownList.querySelector(`.split-person-row[data-id="${pid}"]`);
       if (!row) return;
 
-      const badge = row.querySelector('.split-person-badge');
       const input = row.querySelector('.split-person-input');
       const inputWrap = row.querySelector('.split-person-input-wrap');
       let resetBtn = row.querySelector('.btn-reset-single-split');
 
       if (pid === activePersonId) {
         if (s.isManual) {
-          if (badge) {
-            badge.className = 'split-person-badge badge-custom';
-            badge.textContent = '✏️ Custom';
-          }
           if (inputWrap) inputWrap.classList.add('is-custom');
           if (!resetBtn && inputWrap) {
             resetBtn = document.createElement('button');
             resetBtn.type = 'button';
             resetBtn.className = 'btn-reset-single-split';
             resetBtn.dataset.id = pid;
-            resetBtn.title = 'Reset to auto';
+            resetBtn.title = 'Reset to equal';
             resetBtn.textContent = '↺';
             resetBtn.addEventListener('click', () => {
               this.manualSplits.delete(pid);
@@ -908,20 +903,12 @@ class WhoseTabApp {
             inputWrap.appendChild(resetBtn);
           }
         } else {
-          if (badge) {
-            badge.className = 'split-person-badge badge-auto';
-            badge.textContent = '⚡ Auto';
-          }
           if (inputWrap) inputWrap.classList.remove('is-custom');
           if (resetBtn) resetBtn.remove();
         }
       } else {
         if (!s.isManual) {
           if (input) input.value = s.amount.toFixed(2);
-          if (badge) {
-            badge.className = 'split-person-badge badge-auto';
-            badge.textContent = '⚡ Auto';
-          }
           if (inputWrap) inputWrap.classList.remove('is-custom');
           if (resetBtn) resetBtn.remove();
         }
@@ -936,19 +923,18 @@ class WhoseTabApp {
         warnRow.className = 'split-warning-row';
         this.dom.summaryBreakdownList.appendChild(warnRow);
       }
-      warnRow.textContent = `⚠️ Custom amounts exceed friends' share by ₹${diff.toFixed(2)}`;
+      warnRow.textContent = `Total amounts exceed bill by ₹${diff.toFixed(2)}`;
     } else if (warnRow) {
       warnRow.remove();
     }
 
     if (this.dom.submitSnapBtn) {
-      const numFriends = this.selectedPersonIds.size;
-      if (numFriends > 0 && calc.friendsTotalPool > 0) {
-        this.dom.submitSnapBtn.textContent = `⚡ Save Tab (Collect ₹${calc.friendsTotalPool.toFixed(2)} from ${numFriends} friend${numFriends > 1 ? 's' : ''})`;
+      if (calc.friendsTotalPool > 0) {
+        this.dom.submitSnapBtn.textContent = `Save Expense (₹${calc.friendsTotalPool.toFixed(2)})`;
       } else if (calc.total > 0) {
-        this.dom.submitSnapBtn.textContent = `Save Tab (₹${calc.total.toFixed(2)})`;
+        this.dom.submitSnapBtn.textContent = `Save Expense (₹${calc.total.toFixed(2)})`;
       } else {
-        this.dom.submitSnapBtn.textContent = 'Save Tab';
+        this.dom.submitSnapBtn.textContent = 'Save Expense';
       }
     }
   }
@@ -976,22 +962,21 @@ class WhoseTabApp {
     const numFriends = this.selectedPersonIds.size;
     if (this.dom.selectedPeopleSummary) {
       if (numFriends === 0) {
-        this.dom.selectedPeopleSummary.innerHTML = '<span class="text-warning">⚠️ Tap friends to include in split (select 1, 2, 4-5 or more)</span>';
+        this.dom.selectedPeopleSummary.innerHTML = '<span class="text-warning">Select people to split with</span>';
       } else {
         const names = calc.selectedList.map(p => p.name).join(', ');
-        const customNote = calc.hasManual ? ` (${calc.numManual} custom)` : '';
-        this.dom.selectedPeopleSummary.innerHTML = `<strong>${numFriends} friend${numFriends > 1 ? 's' : ''}</strong> selected: ${names}${customNote}`;
+        this.dom.selectedPeopleSummary.innerHTML = `<strong>${numFriends} friend${numFriends > 1 ? 's' : ''}</strong>: ${names}`;
       }
     }
 
     // Update Submit button text
     if (this.dom.submitSnapBtn) {
-      if (numFriends > 0 && calc.friendsTotalPool > 0) {
-        this.dom.submitSnapBtn.textContent = `⚡ Save Tab (Collect ₹${calc.friendsTotalPool.toFixed(2)} from ${numFriends} friend${numFriends > 1 ? 's' : ''})`;
+      if (calc.friendsTotalPool > 0) {
+        this.dom.submitSnapBtn.textContent = `Save Expense (₹${calc.friendsTotalPool.toFixed(2)})`;
       } else if (calc.total > 0) {
-        this.dom.submitSnapBtn.textContent = `Save Tab (₹${calc.total.toFixed(2)})`;
+        this.dom.submitSnapBtn.textContent = `Save Expense (₹${calc.total.toFixed(2)})`;
       } else {
-        this.dom.submitSnapBtn.textContent = 'Save Tab';
+        this.dom.submitSnapBtn.textContent = 'Save Expense';
       }
     }
 
@@ -1005,7 +990,7 @@ class WhoseTabApp {
     if (numFriends === 0) {
       this.dom.summaryBreakdownList.innerHTML = `
         <div class="text-xs text-muted py-2 text-center">
-          Tap friend names above to calculate their share
+          Select people above to split this expense
         </div>
       `;
       return;
@@ -1020,11 +1005,6 @@ class WhoseTabApp {
         <div class="split-person-row" data-id="${p.id}">
           <div class="split-person-info">
             <span class="split-person-name">${p.name} <small class="text-xs text-muted">(${p.relationship})</small></span>
-            <div class="split-person-status-row">
-              <span class="split-person-badge ${isManual ? 'badge-custom' : 'badge-auto'}">
-                ${isManual ? '✏️ Custom' : '⚡ Auto'}
-              </span>
-            </div>
           </div>
           <div class="split-person-input-wrap ${isManual ? 'is-custom' : ''}">
             <span class="currency-prefix-xs">₹</span>
@@ -1035,7 +1015,7 @@ class WhoseTabApp {
                    data-id="${p.id}" 
                    value="${valStr}" 
                    placeholder="0.00">
-            ${isManual ? `<button type="button" class="btn-reset-single-split" data-id="${p.id}" title="Reset to auto">↺</button>` : ''}
+            ${isManual ? `<button type="button" class="btn-reset-single-split" data-id="${p.id}" title="Reset to equal">↺</button>` : ''}
           </div>
         </div>
       `;
@@ -1054,7 +1034,7 @@ class WhoseTabApp {
       const diff = calc.manualSum - calc.friendsTotalPool;
       rowsHtml += `
         <div class="split-warning-row">
-          ⚠️ Custom amounts exceed friends' share by ₹${diff.toFixed(2)}
+          Total amounts exceed bill by ₹${diff.toFixed(2)}
         </div>
       `;
     }
@@ -1062,8 +1042,8 @@ class WhoseTabApp {
     if (calc.hasManual && numFriends > 1) {
       rowsHtml += `
         <div class="split-reset-all-row">
-          <span class="text-xs text-muted">Tip: edit any amount, others adjust auto</span>
-          <button type="button" class="btn-reset-all-splits" id="resetAllSplitsBtn">↺ Reset all to equal</button>
+          <span></span>
+          <button type="button" class="btn-reset-all-splits" id="resetAllSplitsBtn">Split equally</button>
         </div>
       `;
     }
@@ -1265,25 +1245,25 @@ class WhoseTabApp {
     const category = document.querySelector('input[name="category"]:checked')?.value || 'General';
 
     if (!amount || amount <= 0) {
-      this.showSnapError('⚠️ Please enter a valid amount paid.');
+      this.showSnapError('Please enter a valid amount.');
       return;
     }
 
     if (this.selectedPersonIds.size === 0) {
-      this.showSnapError('⚠️ Please choose whose stuff you bought! Tap one or more friends above.');
+      this.showSnapError('Please select who to split this with.');
       return;
     }
 
     const calc = this.calculateCurrentSplits();
 
     if (calc.myShare > amount) {
-      this.showSnapError(`⚠️ Your share (₹${calc.myShare.toFixed(2)}) cannot be greater than the total bill (₹${amount.toFixed(2)}).`);
+      this.showSnapError(`Your share (₹${calc.myShare.toFixed(2)}) cannot exceed total (₹${amount.toFixed(2)}).`);
       return;
     }
 
     const splitsSum = calc.splits.reduce((acc, s) => acc + s.amount, 0);
     if (calc.hasManual && Math.abs((splitsSum + calc.myShare) - amount) > 0.05) {
-      this.showSnapError(`⚠️ Total shares (₹${(splitsSum + calc.myShare).toFixed(2)}) don't equal total paid (₹${amount.toFixed(2)}). Adjust custom amounts.`);
+      this.showSnapError(`Split amounts (₹${(splitsSum + calc.myShare).toFixed(2)}) do not match total paid (₹${amount.toFixed(2)}).`);
       return;
     }
 
@@ -1615,14 +1595,10 @@ class WhoseTabApp {
     // Render Recent Expenses
     this.dom.recentExpensesList.innerHTML = '';
     if (this.ledger.expenses.length === 0) {
-      this.dom.recentExpensesList.innerHTML = '<div class="text-sm text-muted text-center py-3">No purchases logged yet. Make a payment on Paytm or tap + Snap Expense below!</div>';
+      this.dom.recentExpensesList.innerHTML = '<div class="text-sm text-muted text-center py-3">No expenses logged yet.</div>';
     } else {
+      const receiptIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>';
       this.ledger.expenses.slice(0, 10).forEach(exp => {
-        const catIcons = {
-          Groceries: '🥦', FoodDining: '🍛', SnacksChai: '☕',
-          StationeryBooks: '📚', RoomRentUtilities: '💡', General: '📦'
-        };
-        const icon = catIcons[exp.category] || '📦';
         const dateStr = new Date(exp.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
         
         const participantNames = exp.splits.map(s => {
@@ -1633,7 +1609,7 @@ class WhoseTabApp {
         const row = document.createElement('div');
         row.className = 'expense-row';
         row.innerHTML = `
-          <span class="exp-category-icon">${icon}</span>
+          <span class="exp-category-icon">${receiptIcon}</span>
           <div class="exp-details">
             <span class="exp-title">${exp.title}</span>
             <div class="exp-meta">
@@ -1683,7 +1659,7 @@ class WhoseTabApp {
             </span>
             <span class="balance-label">${bal > 0 ? 'Owes you' : 'Settled'}</span>
           </div>
-          <button type="button" class="btn btn-sm btn-secondary snap-for-person-btn" data-id="${p.id}">Snap</button>
+          <button type="button" class="btn btn-sm btn-secondary snap-for-person-btn" data-id="${p.id}">Split</button>
         </div>
       `;
 

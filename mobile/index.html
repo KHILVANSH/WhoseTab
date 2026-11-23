@@ -20,7 +20,7 @@
         <!-- Live Payment Scanner Status Indicator -->
         <div id="scannerStatusBadge" class="scanner-badge active" title="Background payment scanner status">
           <span class="radar-dot"></span>
-          <span id="scannerStatusText" class="scanner-text">SCANNING FOR PAYMENTS</span>
+          <span id="scannerStatusText" class="scanner-text">Scanner active</span>
         </div>
       </div>
     </header>
@@ -28,15 +28,14 @@
     <!-- Detected Paytm Floating Alert -->
     <section id="paytmNotificationBanner" class="paytm-banner hidden" role="alert">
       <div class="banner-top" id="paytmBannerBody">
-        <div class="banner-icon">💳</div>
         <div class="banner-info">
-          <div class="banner-title">Paytm Payment Detected</div>
-          <div class="banner-detail" id="paytmBannerDetail">Paid ₹0.00 to Merchant</div>
+          <div class="banner-title">Payment Detected</div>
+          <div class="banner-detail" id="paytmBannerDetail">₹0.00 to Merchant</div>
         </div>
       </div>
       <div class="banner-buttons">
-        <button type="button" id="paytmSnapBtn" class="btn btn-paytm-action">⚡ Snap to Friend(s)</button>
-        <button type="button" id="paytmDismissBtn" class="btn btn-paytm-dismiss">✕ Dismiss</button>
+        <button type="button" id="paytmSnapBtn" class="btn btn-paytm-action">Split Expense</button>
+        <button type="button" id="paytmDismissBtn" class="btn btn-paytm-dismiss">Dismiss</button>
       </div>
     </section>
 
@@ -121,11 +120,11 @@
               <span class="setting-desc">Wait time before bringing WhoseTab to foreground</span>
             </div>
             <select id="paytmDelaySelector" class="form-select">
-              <option value="0" selected>⚡ Instant (No Delay, 0s)</option>
-              <option value="1000">⏱️ Slight Delay (1 second)</option>
-              <option value="2000">⏱️ 2 seconds</option>
-              <option value="3000">⏱️ 3 seconds</option>
-              <option value="5000">⏱️ 5 seconds</option>
+              <option value="0" selected>Instant (0s)</option>
+              <option value="1000">1 second</option>
+              <option value="2000">2 seconds</option>
+              <option value="3000">3 seconds</option>
+              <option value="5000">5 seconds</option>
             </select>
           </div>
 
@@ -145,7 +144,7 @@
           <div class="setting-item" id="settingsItemNotif">
             <div class="setting-text">
               <span class="setting-title">1. Notification Access</span>
-              <span class="setting-desc">Intercepts payment confirmations from Paytm</span>
+              <span class="setting-desc">Detect payment notifications</span>
             </div>
             <button type="button" id="grantNotificationAccessBtn" class="btn btn-sm btn-primary">Enable</button>
           </div>
@@ -153,7 +152,7 @@
           <div class="setting-item mt-2" id="settingsItemOverlay">
             <div class="setting-text">
               <span class="setting-title">2. Draw Over Other Apps</span>
-              <span class="setting-desc">Bypasses Android lock to open app over Paytm</span>
+              <span class="setting-desc">Open app automatically over payments</span>
             </div>
             <button type="button" id="grantOverlayAccessBtn" class="btn btn-sm btn-primary">Enable</button>
           </div>
@@ -165,7 +164,7 @@
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">WhoseTab Version</span>
-              <span class="setting-desc" id="appVersionDisplay">v1.0.6</span>
+              <span class="setting-desc" id="appVersionDisplay">v1.0.7</span>
             </div>
             <button type="button" id="checkForUpdatesBtn" class="btn btn-sm btn-primary">Check for updates</button>
           </div>
@@ -189,24 +188,30 @@
 
     </main>
 
-    <!-- Floating Action Button (Snap Expense) -->
-    <button type="button" id="openSnapModalBtn" class="fab" aria-label="Snap New Expense" title="Snap New Expense">
+    <!-- Floating Action Button (Add Expense) -->
+    <button type="button" id="openSnapModalBtn" class="fab" aria-label="Add Expense" title="Add Expense">
       <span class="fab-icon">+</span>
-      <span class="fab-label">Snap Expense</span>
+      <span class="fab-label">Add Expense</span>
     </button>
 
     <!-- Bottom Navigation Bar -->
     <nav class="bottom-nav">
       <button type="button" class="nav-item active" data-target="viewDashboard">
-        <span class="nav-icon">📊</span>
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+        </span>
         <span class="nav-label">Ledger</span>
       </button>
       <button type="button" class="nav-item" data-target="viewPeople">
-        <span class="nav-icon">👥</span>
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        </span>
         <span class="nav-label">People</span>
       </button>
       <button type="button" class="nav-item" data-target="viewSettings">
-        <span class="nav-icon">⚙️</span>
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </span>
         <span class="nav-label">Settings</span>
       </button>
     </nav>
@@ -217,23 +222,25 @@
         <div class="sheet-handle"></div>
         <div class="modal-header">
           <div>
-            <span class="setup-badge">⚡ Setup Required</span>
-            <h3 class="setup-title mt-1">Enable Paytm Snapper</h3>
+            <span class="setup-badge">Permissions</span>
+            <h3 class="setup-title mt-1">Enable Scanner</h3>
           </div>
           <button type="button" id="closeSetupModalBtn" class="btn-close" aria-label="Dismiss">✕</button>
         </div>
 
         <p class="setup-intro">
-          WhoseTab automatically intercepts Paytm payments and pops open to let you choose whose stuff you bought. Please enable these 2 required permissions:
+          WhoseTab detects Paytm notifications so you can log expenses instantly. Please enable these 2 permissions:
         </p>
 
         <div class="setup-steps-list">
           <!-- Step 1: Notification Access -->
           <div class="setup-step-card" id="setupStepNotif">
-            <div class="setup-step-icon">🔔</div>
+            <div class="setup-step-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            </div>
             <div class="setup-step-body">
               <div class="setup-step-title">1. Notification Access</div>
-              <div class="setup-step-desc">Allows scanner to intercept Paytm payment notifications.</div>
+              <div class="setup-step-desc">Allows detecting Paytm payment notifications.</div>
             </div>
             <button type="button" id="setupGrantNotifBtn" class="btn btn-sm btn-primary setup-action-btn">
               Enable
@@ -242,10 +249,12 @@
 
           <!-- Step 2: Display Over Other Apps -->
           <div class="setup-step-card" id="setupStepOverlay">
-            <div class="setup-step-icon">📱</div>
+            <div class="setup-step-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+            </div>
             <div class="setup-step-body">
               <div class="setup-step-title">2. Draw Over Other Apps</div>
-              <div class="setup-step-desc">Allows WhoseTab to instantly pop open on your screen right after you pay.</div>
+              <div class="setup-step-desc">Allows WhoseTab to open right after a payment is made.</div>
             </div>
             <button type="button" id="setupGrantOverlayBtn" class="btn btn-sm btn-primary setup-action-btn">
               Enable
@@ -255,7 +264,7 @@
 
         <div class="setup-footer mt-4">
           <button type="button" id="completeSetupBtn" class="btn btn-primary btn-block btn-lg">
-            Continue to WhoseTab
+            Continue
           </button>
           <button type="button" id="skipSetupBtn" class="btn btn-text btn-block mt-2">
             I'll configure this later in Settings
@@ -264,21 +273,21 @@
       </div>
     </div>
 
-    <!-- MODAL: SNAP / LOG EXPENSE -->
+    <!-- MODAL: ADD / LOG EXPENSE -->
     <div id="snapExpenseModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3 id="modalTitle">Snap Purchase</h3>
+          <h3 id="modalTitle">Add Expense</h3>
           <button type="button" id="closeSnapModalBtn" class="btn-close" aria-label="Close">✕</button>
         </div>
 
         <form id="snapExpenseForm">
-          <!-- In-Modal Validation Error Notice (replaces ugly browser alerts) -->
+          <!-- In-Modal Validation Error Notice -->
           <div id="snapFormError" class="form-error-banner hidden" role="alert"></div>
 
           <div class="form-group">
-            <label for="snapAmount" class="form-label">Amount Paid</label>
+            <label for="snapAmount" class="form-label">Amount</label>
             <div class="amount-input-wrap">
               <span class="currency-prefix">₹</span>
               <input type="number" id="snapAmount" class="input-amount" placeholder="0" step="any" required inputmode="decimal">
@@ -286,55 +295,55 @@
           </div>
 
           <div class="form-group">
-            <label for="snapTitle" class="form-label">What was purchased?</label>
-            <input type="text" id="snapTitle" class="form-input" placeholder="e.g. Milk & Bread, Canteen Lunch, Xerox">
+            <label for="snapTitle" class="form-label">Description</label>
+            <input type="text" id="snapTitle" class="form-input" placeholder="e.g. Groceries, Lunch, Supplies">
           </div>
 
           <div class="form-group">
             <label class="form-label">Category</label>
             <div class="category-chips">
-              <label class="cat-radio"><input type="radio" name="category" value="Groceries" checked><span>🥦 Groceries</span></label>
-              <label class="cat-radio"><input type="radio" name="category" value="FoodDining"><span>🍛 Food</span></label>
-              <label class="cat-radio"><input type="radio" name="category" value="SnacksChai"><span>☕ Chai/Snacks</span></label>
-              <label class="cat-radio"><input type="radio" name="category" value="StationeryBooks"><span>📚 Books/Xerox</span></label>
-              <label class="cat-radio"><input type="radio" name="category" value="RoomRentUtilities"><span>💡 Rent/Wifi</span></label>
-              <label class="cat-radio"><input type="radio" name="category" value="General"><span>📦 Other</span></label>
+              <label class="cat-radio"><input type="radio" name="category" value="Groceries" checked><span>Groceries</span></label>
+              <label class="cat-radio"><input type="radio" name="category" value="FoodDining"><span>Food & Dining</span></label>
+              <label class="cat-radio"><input type="radio" name="category" value="SnacksChai"><span>Snacks & Drinks</span></label>
+              <label class="cat-radio"><input type="radio" name="category" value="StationeryBooks"><span>Books & Print</span></label>
+              <label class="cat-radio"><input type="radio" name="category" value="RoomRentUtilities"><span>Rent & Utilities</span></label>
+              <label class="cat-radio"><input type="radio" name="category" value="General"><span>General</span></label>
             </div>
           </div>
 
           <div class="form-group" id="peopleSelectSection">
             <div class="label-row">
-              <label class="form-label">Whose stuff did you buy?</label>
+              <label class="form-label">Split between</label>
               <div class="people-actions-row">
                 <button type="button" class="btn-text-xs" id="selectAllPeopleBtn">Select All</button>
                 <button type="button" class="btn-text-xs" id="clearAllPeopleBtn">Clear</button>
               </div>
             </div>
             <div id="modalPeopleChips" class="people-chips-grid"></div>
-            <div id="selectedPeopleSummary" class="text-xs text-muted mt-1">Tap friends to include in split (select 1, 2, 4-5 or more)</div>
+            <div id="selectedPeopleSummary" class="text-xs text-muted mt-1">Select people to split with</div>
           </div>
 
-          <!-- My Money Share Input & Live Real-Time Calculation -->
+          <!-- My Share Input & Live Calculation -->
           <div class="form-group split-calc-group">
             <div class="label-row">
-              <label for="snapMyShare" class="form-label">My Money (My Share)</label>
-              <span class="text-xs text-muted">Leave empty if 100% for them</span>
+              <label for="snapMyShare" class="form-label">My share</label>
+              <span class="text-xs text-muted">Leave empty if ₹0</span>
             </div>
             <div class="my-share-input-wrap">
               <span class="currency-prefix-sm">₹</span>
-              <input type="number" id="snapMyShare" class="input-share" placeholder="0.00 (Bought 100% for them)" step="any" inputmode="decimal">
+              <input type="number" id="snapMyShare" class="input-share" placeholder="0.00" step="any" inputmode="decimal">
               <button type="button" id="clearMyShareBtn" class="btn-clear-share" title="Reset to 0">✕</button>
             </div>
             <div class="split-preset-pills mt-2">
-              <button type="button" class="preset-pill active" id="preset100ThemBtn">100% For Them</button>
-              <button type="button" class="preset-pill" id="presetSplitEvenBtn">⚡ Split Evenly With Me</button>
+              <button type="button" class="preset-pill active" id="preset100ThemBtn">None for me</button>
+              <button type="button" class="preset-pill" id="presetSplitEvenBtn">Split equally with me</button>
             </div>
           </div>
 
-          <!-- Live Dynamic Split Breakdown Card -->
+          <!-- Live Split Breakdown Card -->
           <div id="splitBreakdownCard" class="split-summary-card">
             <div class="summary-card-header">
-              <span class="summary-card-title">📊 Split Breakdown</span>
+              <span class="summary-card-title">Split Breakdown</span>
               <span id="summaryFriendsTotal" class="summary-card-total">₹0.00 to collect</span>
             </div>
             <div id="summaryBreakdownList" class="summary-breakdown-list">
@@ -343,7 +352,7 @@
           </div>
 
           <div class="modal-footer mt-3">
-            <button type="submit" class="btn btn-primary btn-block btn-lg" id="submitSnapBtn">Save to Tab</button>
+            <button type="submit" class="btn btn-primary btn-block btn-lg" id="submitSnapBtn">Save Expense</button>
           </div>
         </form>
       </div>
@@ -411,11 +420,11 @@
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3>⚡ Update Available</h3>
+          <h3>Update Available</h3>
           <button type="button" id="closeUpdateModalBtn" class="btn-close">✕</button>
         </div>
         <div class="p-2">
-          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.0.6</div>
+          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.0.7</div>
           <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Bug fixes and improvements</div>
 
           <!-- In-App Download Progress Indicator -->
