@@ -40,6 +40,41 @@ public class WebAppInterface {
         );
     }
 
+    // --- KEEP SCREEN ON / SCREEN AWAKE ---
+    @JavascriptInterface
+    public boolean isKeepScreenOn() {
+        SharedPreferences prefs = activity.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getBoolean("whosetab_keep_screen_on", true);
+    }
+
+    @JavascriptInterface
+    public void setKeepScreenOn(boolean enabled) {
+        SharedPreferences prefs = activity.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putBoolean("whosetab_keep_screen_on", enabled).apply();
+        if (activity instanceof MainActivity) {
+            ((MainActivity) activity).setKeepScreenOnEnabled(enabled);
+        }
+        activity.runOnUiThread(() -> 
+            Toast.makeText(activity, "Keep Screen Awake: " + (enabled ? "Enabled" : "Disabled"), Toast.LENGTH_SHORT).show()
+        );
+    }
+
+    // --- GITHUB TOKEN (FOR PRIVATE REPO UPDATES) ---
+    @JavascriptInterface
+    public String getGitHubToken() {
+        SharedPreferences prefs = activity.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getString("github_pat_token", "");
+    }
+
+    @JavascriptInterface
+    public void setGitHubToken(String token) {
+        SharedPreferences prefs = activity.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putString("github_pat_token", token != null ? token.trim() : "").apply();
+        activity.runOnUiThread(() -> 
+            Toast.makeText(activity, "GitHub Token saved for auto-updates", Toast.LENGTH_SHORT).show()
+        );
+    }
+
     // --- PERMISSION CHECKS & SYSTEM SETTINGS ---
     @JavascriptInterface
     public boolean isNotificationAccessGranted() {

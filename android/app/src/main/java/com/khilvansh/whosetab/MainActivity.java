@@ -34,7 +34,11 @@ public class MainActivity extends AppCompatActivity {
         window.setStatusBarColor(Color.parseColor("#0B0F19"));
         window.setNavigationBarColor(Color.parseColor("#0B0F19"));
 
+        // Keep Screen Awake by default when working on mobile
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
         webView = new WebView(this);
+        webView.setKeepScreenOn(true);
         setContentView(webView);
 
         WebSettings settings = webView.getSettings();
@@ -133,6 +137,18 @@ public class MainActivity extends AppCompatActivity {
                 webView.evaluateJavascript(js, null);
             });
         }
+    }
+
+    public void setKeepScreenOnEnabled(boolean enabled) {
+        runOnUiThread(() -> {
+            if (enabled) {
+                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                if (webView != null) webView.setKeepScreenOn(true);
+            } else {
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                if (webView != null) webView.setKeepScreenOn(false);
+            }
+        });
     }
 
     @Override

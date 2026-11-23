@@ -151,6 +151,18 @@
             </label>
           </div>
 
+          <!-- Keep Screen Awake (Always On) -->
+          <div class="setting-item">
+            <div class="setting-text">
+              <span class="setting-title">Keep Screen Awake</span>
+              <span class="setting-desc">Prevent phone screen from turning off while working</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="keepScreenAwakeToggle" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">Currency Symbol</span>
@@ -193,6 +205,15 @@
             <button id="checkForUpdatesBtn" class="btn btn-sm btn-primary">Check for Updates</button>
           </div>
           <div id="updateStatusNotice" class="text-xs text-muted mt-1">Checks https://github.com/KHILVANSH/WhoseTab</div>
+
+          <div class="form-group mt-3">
+            <label for="githubPatInput" class="form-label">GitHub Token for Private Repo (Optional)</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="password" id="githubPatInput" class="form-input" placeholder="ghp_... (for private repo APK download)">
+              <button id="saveGithubPatBtn" class="btn btn-sm btn-secondary">Save</button>
+            </div>
+            <span class="text-xs text-muted">Required only to download updates from a private GitHub repo.</span>
+          </div>
         </div>
 
         <h3 class="mt-4">Offline Data & Backup</h3>

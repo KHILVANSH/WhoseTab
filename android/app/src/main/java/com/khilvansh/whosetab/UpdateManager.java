@@ -62,6 +62,14 @@ public class UpdateManager {
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
                 conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
+
+                // If private repo token is stored, use it for authorization
+                android.content.SharedPreferences prefs = context.getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, Context.MODE_PRIVATE);
+                String token = prefs.getString("github_pat_token", "");
+                if (token != null && !token.trim().isEmpty()) {
+                    conn.setRequestProperty("Authorization", "Bearer " + token.trim());
+                }
+
                 conn.setConnectTimeout(8000);
                 conn.setReadTimeout(8000);
 

@@ -131,6 +131,9 @@ class WhoseTabApp {
 
       // Settings Elements
       paytmDelaySelector: document.getElementById('paytmDelaySelector'),
+      keepScreenAwakeToggle: document.getElementById('keepScreenAwakeToggle'),
+      githubPatInput: document.getElementById('githubPatInput'),
+      saveGithubPatBtn: document.getElementById('saveGithubPatBtn'),
       grantNotificationAccessBtn: document.getElementById('grantNotificationAccessBtn'),
       grantOverlayAccessBtn: document.getElementById('grantOverlayAccessBtn'),
       checkForUpdatesBtn: document.getElementById('checkForUpdatesBtn'),
@@ -202,6 +205,44 @@ class WhoseTabApp {
         localStorage.setItem('whosetab_paytm_delay', delayMs.toString());
         if (window.AndroidBridge && window.AndroidBridge.setOpenDelay) {
           window.AndroidBridge.setOpenDelay(delayMs);
+        }
+      });
+    }
+
+    // Keep Screen Awake Toggle
+    if (this.dom.keepScreenAwakeToggle) {
+      let isAwake = true;
+      if (window.AndroidBridge && window.AndroidBridge.isKeepScreenOn) {
+        isAwake = window.AndroidBridge.isKeepScreenOn();
+      } else {
+        isAwake = localStorage.getItem('whosetab_keep_screen_on') !== 'false';
+      }
+      this.dom.keepScreenAwakeToggle.checked = isAwake;
+
+      this.dom.keepScreenAwakeToggle.addEventListener('change', (e) => {
+        const enabled = e.target.checked;
+        localStorage.setItem('whosetab_keep_screen_on', enabled.toString());
+        if (window.AndroidBridge && window.AndroidBridge.setKeepScreenOn) {
+          window.AndroidBridge.setKeepScreenOn(enabled);
+        }
+      });
+    }
+
+    // GitHub PAT configuration for updates
+    if (this.dom.githubPatInput && this.dom.saveGithubPatBtn) {
+      if (window.AndroidBridge && window.AndroidBridge.getGitHubToken) {
+        this.dom.githubPatInput.value = window.AndroidBridge.getGitHubToken() || '';
+      } else {
+        this.dom.githubPatInput.value = localStorage.getItem('whosetab_github_pat') || '';
+      }
+
+      this.dom.saveGithubPatBtn.addEventListener('click', () => {
+        const val = this.dom.githubPatInput.value.trim();
+        localStorage.setItem('whosetab_github_pat', val);
+        if (window.AndroidBridge && window.AndroidBridge.setGitHubToken) {
+          window.AndroidBridge.setGitHubToken(val);
+        } else {
+          alert('Token saved locally.');
         }
       });
     }
