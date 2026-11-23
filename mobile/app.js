@@ -10,6 +10,7 @@ class WhoseTabApp {
   constructor() {
     this.ledger = this.loadLedger();
     this.selectedPersonIds = new Set();
+    this.manualSplits = new Map();
     this.detectedPaytmData = null;
     this.currentFilter = 'all';
 
@@ -186,7 +187,7 @@ class WhoseTabApp {
           }
         } catch (e) {}
       }
-      this.dom.appVersionDisplay.textContent = 'v1.0.5';
+      this.dom.appVersionDisplay.textContent = 'v1.0.6';
     }
   }
 
@@ -505,17 +506,19 @@ class WhoseTabApp {
     if (this.dom.selectAllPeopleBtn) {
       this.dom.selectAllPeopleBtn.addEventListener('click', () => {
         this.ledger.people.forEach(p => this.selectedPersonIds.add(p.id));
+        this.manualSplits.clear();
         this.hideSnapError();
         this.renderModalPeopleChips();
-        this.recalculateSplitBreakdown();
+        this.recalculateSplitBreakdown(true);
       });
     }
 
     if (this.dom.clearAllPeopleBtn) {
       this.dom.clearAllPeopleBtn.addEventListener('click', () => {
         this.selectedPersonIds.clear();
+        this.manualSplits.clear();
         this.renderModalPeopleChips();
-        this.recalculateSplitBreakdown();
+        this.recalculateSplitBreakdown(true);
       });
     }
 
@@ -523,28 +526,29 @@ class WhoseTabApp {
     if (this.dom.snapAmount) {
       this.dom.snapAmount.addEventListener('input', () => {
         this.hideSnapError();
-        this.recalculateSplitBreakdown();
+        this.recalculateSplitBreakdown(false);
       });
     }
 
     if (this.dom.snapMyShare) {
       this.dom.snapMyShare.addEventListener('input', () => {
         this.hideSnapError();
-        this.recalculateSplitBreakdown();
+        this.recalculateSplitBreakdown(false);
       });
     }
 
     if (this.dom.clearMyShareBtn) {
       this.dom.clearMyShareBtn.addEventListener('click', () => {
         if (this.dom.snapMyShare) this.dom.snapMyShare.value = '';
-        this.recalculateSplitBreakdown();
+        this.recalculateSplitBreakdown(false);
       });
     }
 
     if (this.dom.preset100ThemBtn) {
       this.dom.preset100ThemBtn.addEventListener('click', () => {
         if (this.dom.snapMyShare) this.dom.snapMyShare.value = '';
-        this.recalculateSplitBreakdown();
+        this.manualSplits.clear();
+        this.recalculateSplitBreakdown(true);
       });
     }
 
@@ -556,11 +560,12 @@ class WhoseTabApp {
           this.showSnapError('⚠️ Please select at least one friend above first to split evenly.');
           return;
         }
+        this.manualSplits.clear();
         if (total > 0) {
           const splitShare = Math.round((total / (numFriends + 1)) * 100) / 100;
           if (this.dom.snapMyShare) this.dom.snapMyShare.value = splitShare.toFixed(2);
         }
-        this.recalculateSplitBreakdown();
+        this.recalculateSplitBreakdown(true);
       });
     }
 
@@ -791,15 +796,170 @@ class WhoseTabApp {
     }
   }
 
-  recalculateSplitBreakdown() {
+  calculateCurrentSplits() {
     const total = parseFloat(this.dom.snapAmount.value) || 0;
     const rawMyShare = this.dom.snapMyShare ? this.dom.snapMyShare.value.trim() : '';
     let myShare = rawMyShare !== '' ? parseFloat(rawMyShare) : 0;
     if (isNaN(myShare) || myShare < 0) myShare = 0;
 
+    const selectedList = Array.from(this.selectedPersonIds)
+      .map(id => this.ledger.people.find(p => p.id === id))
+      .filter(Boolean);
+
+    const friendsTotalPool = Math.max(0, total - myShare);
+
+    // Filter manual splits to only people currently selected
+    const manualMap = new Map();
+    let manualSum = 0;
+    const autoList = [];
+
+    selectedList.forEach(p => {
+      if (this.manualSplits.has(p.id)) {
+        const val = parseFloat(this.manualSplits.get(p.id)) || 0;
+        manualMap.set(p.id, val);
+        manualSum += val;
+      } else {
+        autoList.push(p);
+      }
+    });
+
+    const remainingForAuto = Math.max(0, friendsTotalPool - manualSum);
+    const numAuto = autoList.length;
+
+    const autoMap = new Map();
+    if (numAuto > 0) {
+      const totalCents = Math.round(remainingForAuto * 100);
+      const baseCents = Math.floor(totalCents / numAuto);
+      const remainder = totalCents - (baseCents * numAuto);
+
+      autoList.forEach((person, idx) => {
+        const cents = baseCents + (idx < remainder ? 1 : 0);
+        autoMap.set(person.id, cents / 100);
+      });
+    }
+
+    const splits = selectedList.map(p => {
+      if (manualMap.has(p.id)) {
+        return {
+          person: p,
+          amount: manualMap.get(p.id),
+          isManual: true
+        };
+      } else {
+        return {
+          person: p,
+          amount: autoMap.get(p.id) || 0,
+          isManual: false
+        };
+      }
+    });
+
+    return {
+      total,
+      myShare,
+      friendsTotalPool,
+      manualSum,
+      remainingForAuto,
+      hasManual: manualMap.size > 0,
+      splits,
+      numAuto,
+      numManual: manualMap.size,
+      selectedList
+    };
+  }
+
+  updateAutoInputsInPlace(activePersonId) {
+    const calc = this.calculateCurrentSplits();
+
+    if (this.dom.summaryFriendsTotal) {
+      this.dom.summaryFriendsTotal.textContent = `₹${calc.friendsTotalPool.toFixed(2)} to collect`;
+    }
+
+    if (!this.dom.summaryBreakdownList) return;
+
+    calc.splits.forEach(s => {
+      const pid = s.person.id;
+      const row = this.dom.summaryBreakdownList.querySelector(`.split-person-row[data-id="${pid}"]`);
+      if (!row) return;
+
+      const badge = row.querySelector('.split-person-badge');
+      const input = row.querySelector('.split-person-input');
+      const inputWrap = row.querySelector('.split-person-input-wrap');
+      let resetBtn = row.querySelector('.btn-reset-single-split');
+
+      if (pid === activePersonId) {
+        if (s.isManual) {
+          if (badge) {
+            badge.className = 'split-person-badge badge-custom';
+            badge.textContent = '✏️ Custom';
+          }
+          if (inputWrap) inputWrap.classList.add('is-custom');
+          if (!resetBtn && inputWrap) {
+            resetBtn = document.createElement('button');
+            resetBtn.type = 'button';
+            resetBtn.className = 'btn-reset-single-split';
+            resetBtn.dataset.id = pid;
+            resetBtn.title = 'Reset to auto';
+            resetBtn.textContent = '↺';
+            resetBtn.addEventListener('click', () => {
+              this.manualSplits.delete(pid);
+              this.recalculateSplitBreakdown(true);
+            });
+            inputWrap.appendChild(resetBtn);
+          }
+        } else {
+          if (badge) {
+            badge.className = 'split-person-badge badge-auto';
+            badge.textContent = '⚡ Auto';
+          }
+          if (inputWrap) inputWrap.classList.remove('is-custom');
+          if (resetBtn) resetBtn.remove();
+        }
+      } else {
+        if (!s.isManual) {
+          if (input) input.value = s.amount.toFixed(2);
+          if (badge) {
+            badge.className = 'split-person-badge badge-auto';
+            badge.textContent = '⚡ Auto';
+          }
+          if (inputWrap) inputWrap.classList.remove('is-custom');
+          if (resetBtn) resetBtn.remove();
+        }
+      }
+    });
+
+    let warnRow = this.dom.summaryBreakdownList.querySelector('.split-warning-row');
+    if (calc.manualSum > calc.friendsTotalPool && calc.friendsTotalPool > 0) {
+      const diff = calc.manualSum - calc.friendsTotalPool;
+      if (!warnRow) {
+        warnRow = document.createElement('div');
+        warnRow.className = 'split-warning-row';
+        this.dom.summaryBreakdownList.appendChild(warnRow);
+      }
+      warnRow.textContent = `⚠️ Custom amounts exceed friends' share by ₹${diff.toFixed(2)}`;
+    } else if (warnRow) {
+      warnRow.remove();
+    }
+
+    if (this.dom.submitSnapBtn) {
+      const numFriends = this.selectedPersonIds.size;
+      if (numFriends > 0 && calc.friendsTotalPool > 0) {
+        this.dom.submitSnapBtn.textContent = `⚡ Save Tab (Collect ₹${calc.friendsTotalPool.toFixed(2)} from ${numFriends} friend${numFriends > 1 ? 's' : ''})`;
+      } else if (calc.total > 0) {
+        this.dom.submitSnapBtn.textContent = `Save Tab (₹${calc.total.toFixed(2)})`;
+      } else {
+        this.dom.submitSnapBtn.textContent = 'Save Tab';
+      }
+    }
+  }
+
+  recalculateSplitBreakdown(rebuildList = true) {
+    const calc = this.calculateCurrentSplits();
+    const rawMyShare = this.dom.snapMyShare ? this.dom.snapMyShare.value.trim() : '';
+
     // Preset pills highlight
     if (this.dom.preset100ThemBtn && this.dom.presetSplitEvenBtn) {
-      if (rawMyShare === '' || myShare === 0) {
+      if (rawMyShare === '' || calc.myShare === 0) {
         this.dom.preset100ThemBtn.classList.add('active');
         this.dom.presetSplitEvenBtn.classList.remove('active');
       } else {
@@ -807,77 +967,149 @@ class WhoseTabApp {
       }
     }
 
-    const friendsTotal = Math.max(0, total - myShare);
-    const numFriends = this.selectedPersonIds.size;
-
     // Update total friends label
     if (this.dom.summaryFriendsTotal) {
-      this.dom.summaryFriendsTotal.textContent = `₹${friendsTotal.toFixed(2)} to collect`;
+      this.dom.summaryFriendsTotal.textContent = `₹${calc.friendsTotalPool.toFixed(2)} to collect`;
     }
 
     // Update summary text under chips
+    const numFriends = this.selectedPersonIds.size;
     if (this.dom.selectedPeopleSummary) {
       if (numFriends === 0) {
         this.dom.selectedPeopleSummary.innerHTML = '<span class="text-warning">⚠️ Tap friends to include in split (select 1, 2, 4-5 or more)</span>';
       } else {
-        const names = Array.from(this.selectedPersonIds)
-          .map(id => this.ledger.people.find(p => p.id === id)?.name)
-          .filter(Boolean)
-          .join(', ');
-        this.dom.selectedPeopleSummary.innerHTML = `<strong>${numFriends} friend${numFriends > 1 ? 's' : ''}</strong> selected: ${names}`;
-      }
-    }
-
-    // Render Breakdown list
-    if (this.dom.summaryBreakdownList) {
-      if (numFriends === 0) {
-        this.dom.summaryBreakdownList.innerHTML = `
-          <div class="text-xs text-muted py-2 text-center">
-            Tap friend names above to calculate their share
-          </div>
-        `;
-      } else {
-        const selectedList = Array.from(this.selectedPersonIds)
-          .map(id => this.ledger.people.find(p => p.id === id))
-          .filter(Boolean);
-
-        const totalCents = Math.round(friendsTotal * 100);
-        const baseCents = Math.floor(totalCents / selectedList.length);
-        const remainder = totalCents - (baseCents * selectedList.length);
-
-        let rowsHtml = '';
-        selectedList.forEach((person, idx) => {
-          const personShare = (baseCents + (idx < remainder ? 1 : 0)) / 100;
-          rowsHtml += `
-            <div class="summary-item-row">
-              <span class="item-name">${person.name} <small class="text-xs text-muted">(${person.relationship})</small></span>
-              <span class="item-amount positive">+₹${personShare.toFixed(2)}</span>
-            </div>
-          `;
-        });
-
-        if (myShare > 0) {
-          rowsHtml += `
-            <div class="summary-item-row my-share-row">
-              <span class="item-name">You <small class="text-xs text-muted">(Paid by you)</small></span>
-              <span class="item-amount text-muted">₹${myShare.toFixed(2)}</span>
-            </div>
-          `;
-        }
-
-        this.dom.summaryBreakdownList.innerHTML = rowsHtml;
+        const names = calc.selectedList.map(p => p.name).join(', ');
+        const customNote = calc.hasManual ? ` (${calc.numManual} custom)` : '';
+        this.dom.selectedPeopleSummary.innerHTML = `<strong>${numFriends} friend${numFriends > 1 ? 's' : ''}</strong> selected: ${names}${customNote}`;
       }
     }
 
     // Update Submit button text
     if (this.dom.submitSnapBtn) {
-      if (numFriends > 0 && friendsTotal > 0) {
-        this.dom.submitSnapBtn.textContent = `⚡ Save Tab (Collect ₹${friendsTotal.toFixed(2)} from ${numFriends} friend${numFriends > 1 ? 's' : ''})`;
-      } else if (total > 0) {
-        this.dom.submitSnapBtn.textContent = `Save Tab (₹${total.toFixed(2)})`;
+      if (numFriends > 0 && calc.friendsTotalPool > 0) {
+        this.dom.submitSnapBtn.textContent = `⚡ Save Tab (Collect ₹${calc.friendsTotalPool.toFixed(2)} from ${numFriends} friend${numFriends > 1 ? 's' : ''})`;
+      } else if (calc.total > 0) {
+        this.dom.submitSnapBtn.textContent = `Save Tab (₹${calc.total.toFixed(2)})`;
       } else {
         this.dom.submitSnapBtn.textContent = 'Save Tab';
       }
+    }
+
+    if (!rebuildList) {
+      this.updateAutoInputsInPlace(null);
+      return;
+    }
+
+    // Rebuild Breakdown list DOM
+    if (!this.dom.summaryBreakdownList) return;
+    if (numFriends === 0) {
+      this.dom.summaryBreakdownList.innerHTML = `
+        <div class="text-xs text-muted py-2 text-center">
+          Tap friend names above to calculate their share
+        </div>
+      `;
+      return;
+    }
+
+    let rowsHtml = '';
+    calc.splits.forEach(s => {
+      const p = s.person;
+      const isManual = s.isManual;
+      const valStr = isManual ? (this.manualSplits.get(p.id) !== undefined ? this.manualSplits.get(p.id) : s.amount.toFixed(2)) : s.amount.toFixed(2);
+      rowsHtml += `
+        <div class="split-person-row" data-id="${p.id}">
+          <div class="split-person-info">
+            <span class="split-person-name">${p.name} <small class="text-xs text-muted">(${p.relationship})</small></span>
+            <div class="split-person-status-row">
+              <span class="split-person-badge ${isManual ? 'badge-custom' : 'badge-auto'}">
+                ${isManual ? '✏️ Custom' : '⚡ Auto'}
+              </span>
+            </div>
+          </div>
+          <div class="split-person-input-wrap ${isManual ? 'is-custom' : ''}">
+            <span class="currency-prefix-xs">₹</span>
+            <input type="number" 
+                   step="any" 
+                   inputmode="decimal" 
+                   class="split-person-input ${isManual ? 'is-manual' : ''}" 
+                   data-id="${p.id}" 
+                   value="${valStr}" 
+                   placeholder="0.00">
+            ${isManual ? `<button type="button" class="btn-reset-single-split" data-id="${p.id}" title="Reset to auto">↺</button>` : ''}
+          </div>
+        </div>
+      `;
+    });
+
+    if (calc.myShare > 0) {
+      rowsHtml += `
+        <div class="summary-item-row my-share-row">
+          <span class="item-name">You <small class="text-xs text-muted">(Paid by you)</small></span>
+          <span class="item-amount text-muted">₹${calc.myShare.toFixed(2)}</span>
+        </div>
+      `;
+    }
+
+    if (calc.manualSum > calc.friendsTotalPool && calc.friendsTotalPool > 0) {
+      const diff = calc.manualSum - calc.friendsTotalPool;
+      rowsHtml += `
+        <div class="split-warning-row">
+          ⚠️ Custom amounts exceed friends' share by ₹${diff.toFixed(2)}
+        </div>
+      `;
+    }
+
+    if (calc.hasManual && numFriends > 1) {
+      rowsHtml += `
+        <div class="split-reset-all-row">
+          <span class="text-xs text-muted">Tip: edit any amount, others adjust auto</span>
+          <button type="button" class="btn-reset-all-splits" id="resetAllSplitsBtn">↺ Reset all to equal</button>
+        </div>
+      `;
+    }
+
+    this.dom.summaryBreakdownList.innerHTML = rowsHtml;
+
+    // Attach listeners to per-person inputs
+    const inputs = this.dom.summaryBreakdownList.querySelectorAll('.split-person-input');
+    inputs.forEach(inp => {
+      inp.addEventListener('input', (e) => {
+        const pid = e.target.dataset.id;
+        const raw = e.target.value.trim();
+        if (raw === '') {
+          this.manualSplits.delete(pid);
+        } else {
+          const val = parseFloat(raw);
+          if (!isNaN(val) && val >= 0) {
+            this.manualSplits.set(pid, val);
+          }
+        }
+        this.updateAutoInputsInPlace(pid);
+      });
+
+      inp.addEventListener('blur', () => {
+        this.recalculateSplitBreakdown(true);
+      });
+    });
+
+    // Reset single split buttons
+    const resetBtns = this.dom.summaryBreakdownList.querySelectorAll('.btn-reset-single-split');
+    resetBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const pid = btn.dataset.id;
+        this.manualSplits.delete(pid);
+        this.recalculateSplitBreakdown(true);
+      });
+    });
+
+    // Reset all splits button
+    const resetAllBtn = document.getElementById('resetAllSplitsBtn');
+    if (resetAllBtn) {
+      resetAllBtn.addEventListener('click', () => {
+        this.manualSplits.clear();
+        this.recalculateSplitBreakdown(true);
+      });
     }
   }
 
@@ -885,12 +1117,13 @@ class WhoseTabApp {
     if (resetPeople) {
       this.selectedPersonIds.clear();
     }
+    this.manualSplits.clear();
     this.hideSnapError();
     this.dom.snapAmount.value = '';
     this.dom.snapTitle.value = '';
     if (this.dom.snapMyShare) this.dom.snapMyShare.value = '';
     this.renderModalPeopleChips();
-    this.recalculateSplitBreakdown();
+    this.recalculateSplitBreakdown(true);
     this.dom.snapExpenseModal.classList.remove('hidden');
     setTimeout(() => this.dom.snapAmount.focus(), 100);
   }
@@ -898,6 +1131,7 @@ class WhoseTabApp {
   openSnapModalWithPaytm(data) {
     if (!data) return;
     this.selectedPersonIds.clear();
+    this.manualSplits.clear();
     this.hideSnapError();
     this.dom.snapAmount.value = data.amount || '';
     this.dom.snapTitle.value = data.recipient ? `${data.recipient}` : 'Paytm Expense';
@@ -909,7 +1143,7 @@ class WhoseTabApp {
     }
 
     this.renderModalPeopleChips();
-    this.recalculateSplitBreakdown();
+    this.recalculateSplitBreakdown(true);
     this.dom.snapExpenseModal.classList.remove('hidden');
     const sheet = this.dom.snapExpenseModal.querySelector('.modal-sheet');
     if (sheet) sheet.scrollTop = 0;
@@ -918,6 +1152,7 @@ class WhoseTabApp {
   closeSnapModal() {
     this.dom.snapExpenseModal.classList.add('hidden');
     this.hideSnapError();
+    this.manualSplits.clear();
 
     // If closing while a payment was detected, mark it as dismissed so it NEVER pops up again
     if (this.detectedPaytmData) {
@@ -962,6 +1197,7 @@ class WhoseTabApp {
       chip.addEventListener('click', () => {
         if (this.selectedPersonIds.has(p.id)) {
           this.selectedPersonIds.delete(p.id);
+          this.manualSplits.delete(p.id);
           chip.classList.remove('selected');
           const check = chip.querySelector('.chip-check');
           if (check) check.remove();
@@ -976,7 +1212,7 @@ class WhoseTabApp {
           }
         }
         this.hideSnapError();
-        this.recalculateSplitBreakdown();
+        this.recalculateSplitBreakdown(true);
       });
       this.dom.modalPeopleChips.appendChild(chip);
     });
@@ -1038,49 +1274,36 @@ class WhoseTabApp {
       return;
     }
 
-    const rawMyShare = this.dom.snapMyShare ? this.dom.snapMyShare.value.trim() : '';
-    let myShare = rawMyShare !== '' ? parseFloat(rawMyShare) : 0;
-    if (isNaN(myShare) || myShare < 0) myShare = 0;
+    const calc = this.calculateCurrentSplits();
 
-    if (myShare > amount) {
-      this.showSnapError(`⚠️ Your share (₹${myShare.toFixed(2)}) cannot be greater than the total bill (₹${amount.toFixed(2)}).`);
+    if (calc.myShare > amount) {
+      this.showSnapError(`⚠️ Your share (₹${calc.myShare.toFixed(2)}) cannot be greater than the total bill (₹${amount.toFixed(2)}).`);
       return;
     }
 
-    const friendsTotal = Math.max(0, amount - myShare);
-    const selectedList = Array.from(this.selectedPersonIds)
-      .map(id => this.ledger.people.find(p => p.id === id))
-      .filter(Boolean);
-
-    if (selectedList.length === 0) {
-      this.showSnapError('⚠️ Selected contacts could not be found.');
+    const splitsSum = calc.splits.reduce((acc, s) => acc + s.amount, 0);
+    if (calc.hasManual && Math.abs((splitsSum + calc.myShare) - amount) > 0.05) {
+      this.showSnapError(`⚠️ Total shares (₹${(splitsSum + calc.myShare).toFixed(2)}) don't equal total paid (₹${amount.toFixed(2)}). Adjust custom amounts.`);
       return;
     }
 
-    const totalCents = Math.round(friendsTotal * 100);
-    const baseCents = Math.floor(totalCents / selectedList.length);
-    const remainder = totalCents - (baseCents * selectedList.length);
-
-    const splits = selectedList.map((p, idx) => {
-      const personCents = baseCents + (idx < remainder ? 1 : 0);
-      return {
-        personId: p.id,
-        amountOwed: personCents / 100
-      };
-    });
+    const splits = calc.splits.map(s => ({
+      personId: s.person.id,
+      amountOwed: Math.round(s.amount * 100) / 100
+    }));
 
     const newExpense = {
       id: 'e_' + Date.now(),
       title,
       totalAmount: amount,
       paidById: 'me',
-      splitType: myShare > 0 ? 'CustomSplit' : 'BoughtForPerson',
+      splitType: calc.myShare > 0 || calc.hasManual ? 'CustomSplit' : 'BoughtForPerson',
       splits,
       category,
       paymentSource: 'Paytm',
       date: new Date().toISOString(),
       paytmRef: this.detectedPaytmData?.rawText ? 'Paytm Payment' : null,
-      myShare: myShare
+      myShare: calc.myShare
     };
 
     this.ledger.expenses.unshift(newExpense);
@@ -1089,6 +1312,7 @@ class WhoseTabApp {
       this.markPaymentDismissed(this.detectedPaytmData);
       this.detectedPaytmData = null;
     }
+    this.manualSplits.clear();
     this.closeSnapModal();
     if (this.dom.paytmNotificationBanner) {
       this.dom.paytmNotificationBanner.classList.add('hidden');
