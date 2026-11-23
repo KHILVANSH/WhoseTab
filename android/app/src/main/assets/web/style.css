@@ -1012,3 +1012,185 @@ body {
   background: linear-gradient(90deg, var(--color-paytm), var(--color-accent));
   transition: width 0.15s ease-out;
 }
+
+/* ================= Higher Modal Z-Indexes ================= */
+#addPersonModal {
+  z-index: 150;
+}
+#setupModal {
+  z-index: 140;
+}
+
+/* ================= In-Modal Validation Error ================= */
+.form-error-banner {
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid var(--color-danger);
+  color: #fca5a5;
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: var(--spacing-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: shake 0.3s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+.form-error-banner.hidden {
+  display: none;
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+/* ================= Multi-People Selection Actions ================= */
+.people-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+.btn-text-xs {
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.btn-text-xs:hover {
+  text-decoration: underline;
+}
+
+/* ================= My Money Share Input ================= */
+.my-share-input-wrap {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-surface-elevated);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 0 var(--spacing-3);
+  min-height: 48px;
+}
+.my-share-input-wrap:focus-within {
+  border-color: var(--color-accent);
+}
+.currency-prefix-sm {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--color-accent);
+  margin-right: 6px;
+}
+.input-share {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.15rem;
+  font-weight: 700;
+  outline: none;
+}
+.btn-clear-share {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px;
+}
+.btn-clear-share:hover {
+  color: var(--text-primary);
+}
+
+/* ================= Split Preset Pills ================= */
+.split-preset-pills {
+  display: flex;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+}
+.preset-pill {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  border-radius: var(--radius-full);
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.preset-pill.active {
+  background: var(--color-accent);
+  color: #ffffff;
+  border-color: var(--color-accent);
+}
+
+/* ================= Live Dynamic Split Summary Card ================= */
+.split-summary-card {
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-3);
+  margin-top: var(--spacing-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+.summary-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: var(--spacing-2);
+}
+.summary-card-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.summary-card-total {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--color-accent);
+}
+.summary-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.summary-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  padding: 3px 0;
+}
+.summary-item-row .item-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.summary-item-row .item-amount {
+  font-weight: 800;
+}
+.summary-item-row .item-amount.positive {
+  color: var(--color-success, #10b981);
+}
+.summary-item-row.my-share-row {
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: 6px;
+  margin-top: 2px;
+  opacity: 0.85;
+}
+.summary-item-name {
+  font-weight: 600;
+}
+.summary-item-val {
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.summary-item-val.me {
+  color: var(--text-muted);
+}

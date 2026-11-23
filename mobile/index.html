@@ -27,7 +27,7 @@
 
     <!-- Detected Paytm Floating Alert -->
     <section id="paytmNotificationBanner" class="paytm-banner hidden" role="alert">
-      <div class="banner-top">
+      <div class="banner-top" id="paytmBannerBody">
         <div class="banner-icon">💳</div>
         <div class="banner-info">
           <div class="banner-title">Paytm Payment Detected</div>
@@ -35,8 +35,8 @@
         </div>
       </div>
       <div class="banner-buttons">
-        <button type="button" id="paytmSnapBtn" class="btn btn-paytm-action">⚡ Snap to Friend</button>
-        <button type="button" id="paytmDismissBtn" class="btn btn-paytm-dismiss">Dismiss</button>
+        <button type="button" id="paytmSnapBtn" class="btn btn-paytm-action">⚡ Snap to Friend(s)</button>
+        <button type="button" id="paytmDismissBtn" class="btn btn-paytm-dismiss">✕ Dismiss</button>
       </div>
     </section>
 
@@ -165,7 +165,7 @@
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">WhoseTab Version</span>
-              <span class="setting-desc" id="appVersionDisplay">v1.0.3</span>
+              <span class="setting-desc" id="appVersionDisplay">v1.0.4</span>
             </div>
             <button type="button" id="checkForUpdatesBtn" class="btn btn-sm btn-primary">Check for updates</button>
           </div>
@@ -274,6 +274,9 @@
         </div>
 
         <form id="snapExpenseForm">
+          <!-- In-Modal Validation Error Notice (replaces ugly browser alerts) -->
+          <div id="snapFormError" class="form-error-banner hidden" role="alert"></div>
+
           <div class="form-group">
             <label for="snapAmount" class="form-label">Amount Paid</label>
             <div class="amount-input-wrap">
@@ -299,29 +302,47 @@
             </div>
           </div>
 
-          <div class="form-group">
+          <div class="form-group" id="peopleSelectSection">
             <div class="label-row">
               <label class="form-label">Whose stuff did you buy?</label>
-              <span class="text-xs text-muted">Tap contact to select</span>
+              <div class="people-actions-row">
+                <button type="button" class="btn-text-xs" id="selectAllPeopleBtn">Select All</button>
+                <button type="button" class="btn-text-xs" id="clearAllPeopleBtn">Clear</button>
+              </div>
             </div>
             <div id="modalPeopleChips" class="people-chips-grid"></div>
+            <div id="selectedPeopleSummary" class="text-xs text-muted mt-1">Tap friends to include in split (select 1, 2, 4-5 or more)</div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Split Method</label>
-            <div class="split-toggle-group">
-              <label class="split-btn active">
-                <input type="radio" name="splitMode" value="BoughtForPerson" checked>
-                <span>100% For Them</span>
-              </label>
-              <label class="split-btn">
-                <input type="radio" name="splitMode" value="Equal">
-                <span>Split 50/50 With Me</span>
-              </label>
+          <!-- My Money Share Input & Live Real-Time Calculation -->
+          <div class="form-group split-calc-group">
+            <div class="label-row">
+              <label for="snapMyShare" class="form-label">My Money (My Share)</label>
+              <span class="text-xs text-muted">Leave empty if 100% for them</span>
+            </div>
+            <div class="my-share-input-wrap">
+              <span class="currency-prefix-sm">₹</span>
+              <input type="number" id="snapMyShare" class="input-share" placeholder="0.00 (Bought 100% for them)" step="any" inputmode="decimal">
+              <button type="button" id="clearMyShareBtn" class="btn-clear-share" title="Reset to 0">✕</button>
+            </div>
+            <div class="split-preset-pills mt-2">
+              <button type="button" class="preset-pill active" id="preset100ThemBtn">100% For Them</button>
+              <button type="button" class="preset-pill" id="presetSplitEvenBtn">⚡ Split Evenly With Me</button>
             </div>
           </div>
 
-          <div class="modal-footer">
+          <!-- Live Dynamic Split Breakdown Card -->
+          <div id="splitBreakdownCard" class="split-summary-card">
+            <div class="summary-card-header">
+              <span class="summary-card-title">📊 Split Breakdown</span>
+              <span id="summaryFriendsTotal" class="summary-card-total">₹0.00 to collect</span>
+            </div>
+            <div id="summaryBreakdownList" class="summary-breakdown-list">
+              <div class="text-xs text-muted py-1">Select friends above to view split breakdown</div>
+            </div>
+          </div>
+
+          <div class="modal-footer mt-3">
             <button type="submit" class="btn btn-primary btn-block btn-lg" id="submitSnapBtn">Save to Tab</button>
           </div>
         </form>
@@ -394,7 +415,7 @@
           <button type="button" id="closeUpdateModalBtn" class="btn-close">✕</button>
         </div>
         <div class="p-2">
-          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.0.3</div>
+          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.0.4</div>
           <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Bug fixes and improvements</div>
 
           <!-- In-App Download Progress Indicator -->

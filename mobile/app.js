@@ -9,7 +9,7 @@ const THEME_KEY = 'whosetab_theme_preference';
 class WhoseTabApp {
   constructor() {
     this.ledger = this.loadLedger();
-    this.selectedPersonId = null;
+    this.selectedPersonIds = new Set();
     this.detectedPaytmData = null;
     this.currentFilter = 'all';
 
@@ -67,6 +67,7 @@ class WhoseTabApp {
       scannerStatusText: document.getElementById('scannerStatusText'),
 
       paytmNotificationBanner: document.getElementById('paytmNotificationBanner'),
+      paytmBannerBody: document.getElementById('paytmBannerBody'),
       paytmBannerDetail: document.getElementById('paytmBannerDetail'),
       paytmSnapBtn: document.getElementById('paytmSnapBtn'),
       paytmDismissBtn: document.getElementById('paytmDismissBtn'),
@@ -87,9 +88,20 @@ class WhoseTabApp {
       snapExpenseModal: document.getElementById('snapExpenseModal'),
       closeSnapModalBtn: document.getElementById('closeSnapModalBtn'),
       snapExpenseForm: document.getElementById('snapExpenseForm'),
+      snapFormError: document.getElementById('snapFormError'),
       snapAmount: document.getElementById('snapAmount'),
       snapTitle: document.getElementById('snapTitle'),
       modalPeopleChips: document.getElementById('modalPeopleChips'),
+      selectAllPeopleBtn: document.getElementById('selectAllPeopleBtn'),
+      clearAllPeopleBtn: document.getElementById('clearAllPeopleBtn'),
+      selectedPeopleSummary: document.getElementById('selectedPeopleSummary'),
+      snapMyShare: document.getElementById('snapMyShare'),
+      clearMyShareBtn: document.getElementById('clearMyShareBtn'),
+      preset100ThemBtn: document.getElementById('preset100ThemBtn'),
+      presetSplitEvenBtn: document.getElementById('presetSplitEvenBtn'),
+      splitBreakdownCard: document.getElementById('splitBreakdownCard'),
+      summaryFriendsTotal: document.getElementById('summaryFriendsTotal'),
+      summaryBreakdownList: document.getElementById('summaryBreakdownList'),
       submitSnapBtn: document.getElementById('submitSnapBtn'),
 
       quickAddPersonBtn: document.getElementById('quickAddPersonBtn'),
@@ -174,7 +186,7 @@ class WhoseTabApp {
           }
         } catch (e) {}
       }
-      this.dom.appVersionDisplay.textContent = 'v1.0.3';
+      this.dom.appVersionDisplay.textContent = 'v1.0.4';
     }
   }
 
@@ -386,9 +398,20 @@ class WhoseTabApp {
       });
     }
 
-    // Fixed Paytm Snap & Dismiss Buttons
+    // Fixed Paytm Banner & Snap & Dismiss Buttons
+    if (this.dom.paytmBannerBody) {
+      this.dom.paytmBannerBody.addEventListener('click', () => {
+        if (this.detectedPaytmData) {
+          const data = this.detectedPaytmData;
+          this.dom.paytmNotificationBanner.classList.add('hidden');
+          this.openSnapModalWithPaytm(data);
+        }
+      });
+    }
+
     if (this.dom.paytmSnapBtn) {
-      this.dom.paytmSnapBtn.addEventListener('click', () => {
+      this.dom.paytmSnapBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (this.detectedPaytmData) {
           const data = this.detectedPaytmData;
           this.dom.paytmNotificationBanner.classList.add('hidden');
@@ -398,7 +421,8 @@ class WhoseTabApp {
     }
 
     if (this.dom.paytmDismissBtn) {
-      this.dom.paytmDismissBtn.addEventListener('click', () => {
+      this.dom.paytmDismissBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.detectedPaytmData = null;
         this.dom.paytmNotificationBanner.classList.add('hidden');
         if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
@@ -474,14 +498,75 @@ class WhoseTabApp {
       if (e.target === this.dom.snapExpenseModal) this.closeSnapModal();
     });
 
+    // Multi-Person Selection Buttons
+    if (this.dom.selectAllPeopleBtn) {
+      this.dom.selectAllPeopleBtn.addEventListener('click', () => {
+        this.ledger.people.forEach(p => this.selectedPersonIds.add(p.id));
+        this.hideSnapError();
+        this.renderModalPeopleChips();
+        this.recalculateSplitBreakdown();
+      });
+    }
+
+    if (this.dom.clearAllPeopleBtn) {
+      this.dom.clearAllPeopleBtn.addEventListener('click', () => {
+        this.selectedPersonIds.clear();
+        this.renderModalPeopleChips();
+        this.recalculateSplitBreakdown();
+      });
+    }
+
+    // Real-Time Split Calculation Listeners
+    if (this.dom.snapAmount) {
+      this.dom.snapAmount.addEventListener('input', () => {
+        this.hideSnapError();
+        this.recalculateSplitBreakdown();
+      });
+    }
+
+    if (this.dom.snapMyShare) {
+      this.dom.snapMyShare.addEventListener('input', () => {
+        this.hideSnapError();
+        this.recalculateSplitBreakdown();
+      });
+    }
+
+    if (this.dom.clearMyShareBtn) {
+      this.dom.clearMyShareBtn.addEventListener('click', () => {
+        if (this.dom.snapMyShare) this.dom.snapMyShare.value = '';
+        this.recalculateSplitBreakdown();
+      });
+    }
+
+    if (this.dom.preset100ThemBtn) {
+      this.dom.preset100ThemBtn.addEventListener('click', () => {
+        if (this.dom.snapMyShare) this.dom.snapMyShare.value = '';
+        this.recalculateSplitBreakdown();
+      });
+    }
+
+    if (this.dom.presetSplitEvenBtn) {
+      this.dom.presetSplitEvenBtn.addEventListener('click', () => {
+        const total = parseFloat(this.dom.snapAmount.value) || 0;
+        const numFriends = this.selectedPersonIds.size;
+        if (numFriends === 0) {
+          this.showSnapError('⚠️ Please select at least one friend above first to split evenly.');
+          return;
+        }
+        if (total > 0) {
+          const splitShare = Math.round((total / (numFriends + 1)) * 100) / 100;
+          if (this.dom.snapMyShare) this.dom.snapMyShare.value = splitShare.toFixed(2);
+        }
+        this.recalculateSplitBreakdown();
+      });
+    }
+
     // Add Person Modal Open / Close
-    const openAddPerson = () => {
-      this.dom.addPersonModal.classList.remove('hidden');
-    };
-    this.dom.quickAddPersonBtn.addEventListener('click', openAddPerson);
-    this.dom.addPersonPageBtn.addEventListener('click', openAddPerson);
-    this.dom.closeAddPersonModalBtn.addEventListener('click', () => {
-      this.dom.addPersonModal.classList.add('hidden');
+    this.dom.quickAddPersonBtn.addEventListener('click', () => this.openAddPersonModal());
+    this.dom.addPersonPageBtn.addEventListener('click', () => this.openAddPersonModal());
+    this.dom.closeAddPersonModalBtn.addEventListener('click', () => this.closeAddPersonModal());
+    this.dom.addPersonModal.addEventListener('click', (e) => {
+      if (e.target === this.dom.addPersonModal) this.closeAddPersonModal();
     });
 
     // Settle Modal Close
@@ -609,19 +694,148 @@ class WhoseTabApp {
   }
 
   // ================= MODAL CONTROLLER =================
-  openSnapModal() {
-    this.selectedPersonId = null;
+  openAddPersonModal() {
+    if (this.dom.addPersonModal) {
+      this.dom.addPersonModal.classList.remove('hidden');
+      setTimeout(() => {
+        const input = document.getElementById('personName');
+        if (input) input.focus();
+      }, 100);
+    }
+  }
+
+  closeAddPersonModal() {
+    if (this.dom.addPersonModal) {
+      this.dom.addPersonModal.classList.add('hidden');
+    }
+  }
+
+  showSnapError(msg) {
+    if (this.dom.snapFormError) {
+      this.dom.snapFormError.textContent = msg;
+      this.dom.snapFormError.classList.remove('hidden');
+      this.dom.snapFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  hideSnapError() {
+    if (this.dom.snapFormError) {
+      this.dom.snapFormError.textContent = '';
+      this.dom.snapFormError.classList.add('hidden');
+    }
+  }
+
+  recalculateSplitBreakdown() {
+    const total = parseFloat(this.dom.snapAmount.value) || 0;
+    const rawMyShare = this.dom.snapMyShare ? this.dom.snapMyShare.value.trim() : '';
+    let myShare = rawMyShare !== '' ? parseFloat(rawMyShare) : 0;
+    if (isNaN(myShare) || myShare < 0) myShare = 0;
+
+    // Preset pills highlight
+    if (this.dom.preset100ThemBtn && this.dom.presetSplitEvenBtn) {
+      if (rawMyShare === '' || myShare === 0) {
+        this.dom.preset100ThemBtn.classList.add('active');
+        this.dom.presetSplitEvenBtn.classList.remove('active');
+      } else {
+        this.dom.preset100ThemBtn.classList.remove('active');
+      }
+    }
+
+    const friendsTotal = Math.max(0, total - myShare);
+    const numFriends = this.selectedPersonIds.size;
+
+    // Update total friends label
+    if (this.dom.summaryFriendsTotal) {
+      this.dom.summaryFriendsTotal.textContent = `₹${friendsTotal.toFixed(2)} to collect`;
+    }
+
+    // Update summary text under chips
+    if (this.dom.selectedPeopleSummary) {
+      if (numFriends === 0) {
+        this.dom.selectedPeopleSummary.innerHTML = '<span class="text-warning">⚠️ Tap friends to include in split (select 1, 2, 4-5 or more)</span>';
+      } else {
+        const names = Array.from(this.selectedPersonIds)
+          .map(id => this.ledger.people.find(p => p.id === id)?.name)
+          .filter(Boolean)
+          .join(', ');
+        this.dom.selectedPeopleSummary.innerHTML = `<strong>${numFriends} friend${numFriends > 1 ? 's' : ''}</strong> selected: ${names}`;
+      }
+    }
+
+    // Render Breakdown list
+    if (this.dom.summaryBreakdownList) {
+      if (numFriends === 0) {
+        this.dom.summaryBreakdownList.innerHTML = `
+          <div class="text-xs text-muted py-2 text-center">
+            Tap friend names above to calculate their share
+          </div>
+        `;
+      } else {
+        const selectedList = Array.from(this.selectedPersonIds)
+          .map(id => this.ledger.people.find(p => p.id === id))
+          .filter(Boolean);
+
+        const totalCents = Math.round(friendsTotal * 100);
+        const baseCents = Math.floor(totalCents / selectedList.length);
+        const remainder = totalCents - (baseCents * selectedList.length);
+
+        let rowsHtml = '';
+        selectedList.forEach((person, idx) => {
+          const personShare = (baseCents + (idx < remainder ? 1 : 0)) / 100;
+          rowsHtml += `
+            <div class="summary-item-row">
+              <span class="item-name">${person.name} <small class="text-xs text-muted">(${person.relationship})</small></span>
+              <span class="item-amount positive">+₹${personShare.toFixed(2)}</span>
+            </div>
+          `;
+        });
+
+        if (myShare > 0) {
+          rowsHtml += `
+            <div class="summary-item-row my-share-row">
+              <span class="item-name">You <small class="text-xs text-muted">(Paid by you)</small></span>
+              <span class="item-amount text-muted">₹${myShare.toFixed(2)}</span>
+            </div>
+          `;
+        }
+
+        this.dom.summaryBreakdownList.innerHTML = rowsHtml;
+      }
+    }
+
+    // Update Submit button text
+    if (this.dom.submitSnapBtn) {
+      if (numFriends > 0 && friendsTotal > 0) {
+        this.dom.submitSnapBtn.textContent = `⚡ Save Tab (Collect ₹${friendsTotal.toFixed(2)} from ${numFriends} friend${numFriends > 1 ? 's' : ''})`;
+      } else if (total > 0) {
+        this.dom.submitSnapBtn.textContent = `Save Tab (₹${total.toFixed(2)})`;
+      } else {
+        this.dom.submitSnapBtn.textContent = 'Save Tab';
+      }
+    }
+  }
+
+  openSnapModal(resetPeople = true) {
+    if (resetPeople) {
+      this.selectedPersonIds.clear();
+    }
+    this.hideSnapError();
     this.dom.snapAmount.value = '';
     this.dom.snapTitle.value = '';
+    if (this.dom.snapMyShare) this.dom.snapMyShare.value = '';
     this.renderModalPeopleChips();
+    this.recalculateSplitBreakdown();
     this.dom.snapExpenseModal.classList.remove('hidden');
     setTimeout(() => this.dom.snapAmount.focus(), 100);
   }
 
   openSnapModalWithPaytm(data) {
-    this.selectedPersonId = null;
+    if (!data) return;
+    this.selectedPersonIds.clear();
+    this.hideSnapError();
     this.dom.snapAmount.value = data.amount || '';
     this.dom.snapTitle.value = data.recipient ? `${data.recipient}` : 'Paytm Expense';
+    if (this.dom.snapMyShare) this.dom.snapMyShare.value = '';
     
     if (data.suggestedCategory) {
       const radio = document.querySelector(`input[name="category"][value="${data.suggestedCategory}"]`);
@@ -629,6 +843,7 @@ class WhoseTabApp {
     }
 
     this.renderModalPeopleChips();
+    this.recalculateSplitBreakdown();
     this.dom.snapExpenseModal.classList.remove('hidden');
     const sheet = this.dom.snapExpenseModal.querySelector('.modal-sheet');
     if (sheet) sheet.scrollTop = 0;
@@ -636,9 +851,11 @@ class WhoseTabApp {
 
   closeSnapModal() {
     this.dom.snapExpenseModal.classList.add('hidden');
+    this.hideSnapError();
   }
 
   renderModalPeopleChips() {
+    if (!this.dom.modalPeopleChips) return;
     this.dom.modalPeopleChips.innerHTML = '';
     if (this.ledger.people.length === 0) {
       this.dom.modalPeopleChips.innerHTML = `
@@ -657,14 +874,29 @@ class WhoseTabApp {
     }
 
     this.ledger.people.forEach(p => {
+      const isSelected = this.selectedPersonIds.has(p.id);
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = `person-chip ${this.selectedPersonId === p.id ? 'selected' : ''}`;
-      chip.innerHTML = `<span>${p.name}</span> <small class="text-xs">(${p.relationship})</small>`;
+      chip.className = `person-chip ${isSelected ? 'selected' : ''}`;
+      chip.innerHTML = `${isSelected ? '<span class="chip-check">✓</span> ' : ''}<span>${p.name}</span> <small class="text-xs">(${p.relationship})</small>`;
       chip.addEventListener('click', () => {
-        this.selectedPersonId = p.id;
-        document.querySelectorAll('.person-chip').forEach(c => c.classList.remove('selected'));
-        chip.classList.add('selected');
+        if (this.selectedPersonIds.has(p.id)) {
+          this.selectedPersonIds.delete(p.id);
+          chip.classList.remove('selected');
+          const check = chip.querySelector('.chip-check');
+          if (check) check.remove();
+        } else {
+          this.selectedPersonIds.add(p.id);
+          chip.classList.add('selected');
+          if (!chip.querySelector('.chip-check')) {
+            const check = document.createElement('span');
+            check.className = 'chip-check';
+            check.textContent = '✓ ';
+            chip.prepend(check);
+          }
+        }
+        this.hideSnapError();
+        this.recalculateSplitBreakdown();
       });
       this.dom.modalPeopleChips.appendChild(chip);
     });
@@ -710,34 +942,65 @@ class WhoseTabApp {
 
   handleSnapSubmit(e) {
     e.preventDefault();
+    this.hideSnapError();
+
     const amount = parseFloat(this.dom.snapAmount.value);
     const title = this.dom.snapTitle.value.trim() || 'Purchase';
     const category = document.querySelector('input[name="category"]:checked')?.value || 'General';
-    const splitMode = document.querySelector('input[name="splitMode"]:checked')?.value || 'BoughtForPerson';
 
     if (!amount || amount <= 0) {
-      alert('Please enter a valid amount.');
+      this.showSnapError('⚠️ Please enter a valid amount paid.');
       return;
     }
 
-    if (!this.selectedPersonId) {
-      alert('Please choose whose stuff you bought!');
+    if (this.selectedPersonIds.size === 0) {
+      this.showSnapError('⚠️ Please choose whose stuff you bought! Tap one or more friends above.');
       return;
     }
 
-    const splitAmount = splitMode === 'Equal' ? (amount / 2) : amount;
+    const rawMyShare = this.dom.snapMyShare ? this.dom.snapMyShare.value.trim() : '';
+    let myShare = rawMyShare !== '' ? parseFloat(rawMyShare) : 0;
+    if (isNaN(myShare) || myShare < 0) myShare = 0;
+
+    if (myShare > amount) {
+      this.showSnapError(`⚠️ Your share (₹${myShare.toFixed(2)}) cannot be greater than the total bill (₹${amount.toFixed(2)}).`);
+      return;
+    }
+
+    const friendsTotal = Math.max(0, amount - myShare);
+    const selectedList = Array.from(this.selectedPersonIds)
+      .map(id => this.ledger.people.find(p => p.id === id))
+      .filter(Boolean);
+
+    if (selectedList.length === 0) {
+      this.showSnapError('⚠️ Selected contacts could not be found.');
+      return;
+    }
+
+    const totalCents = Math.round(friendsTotal * 100);
+    const baseCents = Math.floor(totalCents / selectedList.length);
+    const remainder = totalCents - (baseCents * selectedList.length);
+
+    const splits = selectedList.map((p, idx) => {
+      const personCents = baseCents + (idx < remainder ? 1 : 0);
+      return {
+        personId: p.id,
+        amountOwed: personCents / 100
+      };
+    });
 
     const newExpense = {
       id: 'e_' + Date.now(),
       title,
       totalAmount: amount,
       paidById: 'me',
-      splitType: splitMode,
-      splits: [{ personId: this.selectedPersonId, amountOwed: splitAmount }],
+      splitType: myShare > 0 ? 'CustomSplit' : 'BoughtForPerson',
+      splits,
       category,
       paymentSource: 'Paytm',
       date: new Date().toISOString(),
-      paytmRef: this.detectedPaytmData?.rawText ? 'Paytm Payment' : null
+      paytmRef: this.detectedPaytmData?.rawText ? 'Paytm Payment' : null,
+      myShare: myShare
     };
 
     this.ledger.expenses.unshift(newExpense);
@@ -749,15 +1012,16 @@ class WhoseTabApp {
       window.AndroidBridge.clearPendingPayment();
     }
 
-    const targetPerson = this.ledger.people.find(p => p.id === this.selectedPersonId);
-    alert(`⚡ Snapped ₹${amount.toFixed(2)} for ${targetPerson?.name}!`);
+    this.render();
   }
 
   handleAddPersonSubmit(e) {
     e.preventDefault();
-    const name = document.getElementById('personName').value.trim();
+    const nameInput = document.getElementById('personName');
+    const name = nameInput ? nameInput.value.trim() : '';
     const rel = document.querySelector('input[name="relationship"]:checked')?.value || 'Friend';
-    const upi = document.getElementById('personUpi').value.trim();
+    const upiInput = document.getElementById('personUpi');
+    const upi = upiInput ? upiInput.value.trim() : '';
 
     if (!name) return;
 
@@ -772,9 +1036,12 @@ class WhoseTabApp {
     this.ledger.people.push(newPerson);
     this.saveLedger();
     this.dom.addPersonForm.reset();
-    this.dom.addPersonModal.classList.add('hidden');
-    this.selectedPersonId = newPerson.id;
+    this.closeAddPersonModal();
+
+    // Auto-select this newly added contact for convenience
+    this.selectedPersonIds.add(newPerson.id);
     this.renderModalPeopleChips();
+    this.recalculateSplitBreakdown();
     this.render();
   }
 
@@ -1087,9 +1354,8 @@ class WhoseTabApp {
       `;
 
       card.querySelector('.snap-for-person-btn').addEventListener('click', () => {
-        this.selectedPersonId = p.id;
-        this.openSnapModal();
-        this.renderModalPeopleChips();
+        this.selectedPersonIds = new Set([p.id]);
+        this.openSnapModal(false);
       });
 
       this.dom.contactsFullList.appendChild(card);
