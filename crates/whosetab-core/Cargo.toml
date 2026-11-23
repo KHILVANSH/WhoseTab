@@ -1,0 +1,16 @@
+[package]
+name = "whosetab-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core offline ledger engine, debt simplifier, and Paytm intent/SMS parser for WhoseTab"
+authors = ["KHILVANSH"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1.10"
+uuid = { version = "1.8", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tempfile = "3.10"

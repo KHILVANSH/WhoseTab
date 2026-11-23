@@ -1,0 +1,11 @@
+[package]
+name = "whosetab-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI utility to manage WhoseTab offline ledger, parse Paytm texts, and simplify balances"
+authors = ["KHILVANSH"]
+
+[dependencies]
+whosetab-core = { path = "../crates/whosetab-core" }
+serde_json = "1.0"
+chrono = "0.4"

@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "crates/whosetab-core",
+    "whosetab-cli",
+]
+resolver = "2"

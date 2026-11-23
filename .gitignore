@@ -1,0 +1,12 @@
+# Rust artifacts
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Operating System
+Thumbs.db
+.DS_Store
+
+# Local data / backups
+*.tmp
+*.log
