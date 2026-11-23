@@ -15,9 +15,11 @@ class WhoseTabApp {
 
     this.initElements();
     this.initTheme();
+    this.initAppVersion();
     this.bindEvents();
     this.checkScannerStatus();
     this.checkUrlParameters();
+    this.checkPendingPayment();
     this.render();
   }
 
@@ -133,10 +135,6 @@ class WhoseTabApp {
   setTheme(theme, save = true) {
     const activeTheme = theme === 'light' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', activeTheme);
-    const themeIcon = document.querySelector('.theme-icon');
-    if (themeIcon) {
-      themeIcon.textContent = activeTheme === 'dark' ? '🌙' : '☀️';
-    }
     if (save) {
       localStorage.setItem(THEME_KEY, activeTheme);
     }
@@ -148,6 +146,22 @@ class WhoseTabApp {
     this.setTheme(next);
     if (this.dom.themeSelector) {
       this.dom.themeSelector.value = next;
+    }
+  }
+
+  // ================= VERSION VIEWER =================
+  initAppVersion() {
+    if (this.dom.appVersionDisplay) {
+      if (window.AndroidBridge && window.AndroidBridge.getAppVersion) {
+        try {
+          const ver = window.AndroidBridge.getAppVersion();
+          if (ver) {
+            this.dom.appVersionDisplay.textContent = 'v' + ver;
+            return;
+          }
+        } catch (e) {}
+      }
+      this.dom.appVersionDisplay.textContent = 'v1.0.1';
     }
   }
 
@@ -173,9 +187,13 @@ class WhoseTabApp {
 
   // ================= EVENT LISTENERS =================
   bindEvents() {
-    // Theme toggle
-    this.dom.themeQuickToggleBtn.addEventListener('click', () => this.toggleTheme());
-    this.dom.themeSelector.addEventListener('change', (e) => this.setTheme(e.target.value));
+    // Theme selector (only in settings)
+    if (this.dom.themeQuickToggleBtn) {
+      this.dom.themeQuickToggleBtn.addEventListener('click', () => this.toggleTheme());
+    }
+    if (this.dom.themeSelector) {
+      this.dom.themeSelector.addEventListener('change', (e) => this.setTheme(e.target.value));
+    }
 
     // Scanner status badge click: opens notification access settings if paused
     if (this.dom.scannerStatusBadge) {
@@ -237,6 +255,9 @@ class WhoseTabApp {
       this.dom.paytmDismissBtn.addEventListener('click', () => {
         this.detectedPaytmData = null;
         this.dom.paytmNotificationBanner.classList.add('hidden');
+        if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
+          window.AndroidBridge.clearPendingPayment();
+        }
       });
     }
 
@@ -391,8 +412,46 @@ class WhoseTabApp {
 
   showPaytmDetectedBanner(data) {
     this.detectedPaytmData = data;
-    this.dom.paytmBannerDetail.textContent = `Paid ₹${data.amount.toFixed(2)} to ${data.recipient || 'Merchant'}`;
+    const recipient = data.recipient || 'Merchant';
+    this.dom.paytmBannerDetail.textContent = `Paid ₹${data.amount.toFixed(2)} to ${recipient}`;
     this.dom.paytmNotificationBanner.classList.remove('hidden');
+  }
+
+  // ================= PENDING PAYMENT & AUTO-POPUP CONTROLLER =================
+  checkPendingPayment() {
+    // 1. Check window._pendingPayment set by native script
+    if (window._pendingPayment) {
+      const data = window._pendingPayment;
+      window._pendingPayment = null;
+      this.handleIncomingPayment(data);
+      return;
+    }
+
+    // 2. Query AndroidBridge
+    if (window.AndroidBridge && window.AndroidBridge.getPendingPayment) {
+      try {
+        const raw = window.AndroidBridge.getPendingPayment();
+        if (raw && raw.length > 2) {
+          const data = JSON.parse(raw);
+          if (data && data.amount > 0) {
+            this.handleIncomingPayment(data);
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching pending payment from bridge', e);
+      }
+    }
+  }
+
+  handleIncomingPayment(data) {
+    if (!data || !data.amount || data.amount <= 0) return;
+    this.detectedPaytmData = data;
+
+    // 1. Show the banner prompt in header
+    this.showPaytmDetectedBanner(data);
+
+    // 2. Automatically open the Snap Expense Modal popup
+    this.openSnapModalWithPaytm(data);
   }
 
   // ================= MODAL CONTROLLER =================
@@ -417,6 +476,8 @@ class WhoseTabApp {
 
     this.renderModalPeopleChips();
     this.dom.snapExpenseModal.classList.remove('hidden');
+    const sheet = this.dom.snapExpenseModal.querySelector('.modal-sheet');
+    if (sheet) sheet.scrollTop = 0;
   }
 
   closeSnapModal() {
@@ -426,7 +487,18 @@ class WhoseTabApp {
   renderModalPeopleChips() {
     this.dom.modalPeopleChips.innerHTML = '';
     if (this.ledger.people.length === 0) {
-      this.dom.modalPeopleChips.innerHTML = '<div class="text-xs text-muted py-2">No contacts saved yet. Tap "+ Add Person" to create your first contact!</div>';
+      this.dom.modalPeopleChips.innerHTML = `
+        <div class="empty-contacts-inline">
+          <span class="text-xs text-muted">No contacts saved yet.</span>
+          <button type="button" class="btn btn-sm btn-secondary mt-1" id="inlineAddPersonBtn">+ Add Contact</button>
+        </div>
+      `;
+      const addBtn = document.getElementById('inlineAddPersonBtn');
+      if (addBtn) {
+        addBtn.addEventListener('click', () => {
+          this.openAddPersonModal();
+        });
+      }
       return;
     }
 
@@ -441,6 +513,18 @@ class WhoseTabApp {
         chip.classList.add('selected');
       });
       this.dom.modalPeopleChips.appendChild(chip);
+    });
+
+    // Add "+ Add Contact" chip at end of list
+    const addChip = document.createElement('button');
+    addChip.type = 'button';
+    addChip.className = 'person-chip add-chip';
+    addChip.innerHTML = `<span>+ Add Contact</span>`;
+    addChip.addEventListener('click', () => {
+      this.openAddPersonModal();
+    });
+    this.dom.modalPeopleChips.appendChild(addChip);
+  }
     });
   }
 
@@ -507,6 +591,11 @@ class WhoseTabApp {
     this.ledger.expenses.unshift(newExpense);
     this.saveLedger();
     this.closeSnapModal();
+    this.dom.paytmNotificationBanner.classList.add('hidden');
+    this.detectedPaytmData = null;
+    if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
+      window.AndroidBridge.clearPendingPayment();
+    }
 
     const targetPerson = this.ledger.people.find(p => p.id === this.selectedPersonId);
     alert(`⚡ Snapped ₹${amount.toFixed(2)} for ${targetPerson?.name}!`);
@@ -532,6 +621,9 @@ class WhoseTabApp {
     this.saveLedger();
     this.dom.addPersonForm.reset();
     this.dom.addPersonModal.classList.add('hidden');
+    this.selectedPersonId = newPerson.id;
+    this.renderModalPeopleChips();
+    this.render();
   }
 
   openSettleModal(personId) {

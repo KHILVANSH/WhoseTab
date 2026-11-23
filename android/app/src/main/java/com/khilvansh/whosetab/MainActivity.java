@@ -82,23 +82,34 @@ public class MainActivity extends AppCompatActivity {
         handleIntentData(intent);
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Check if there is any pending payment awaiting consumption
+        handleIntentData(getIntent());
+    }
+
     private void handleIntentData(Intent intent) {
-        if (intent == null || webView == null) return;
+        if (webView == null) return;
 
         double amount = 0.0;
         String recipient = "";
         String note = "";
         String category = "General";
+        String txnId = "";
 
         // 1. From PaytmNotificationListenerService extras
-        if (intent.hasExtra("paytm_amount")) {
+        if (intent != null && intent.hasExtra("paytm_amount")) {
             amount = intent.getDoubleExtra("paytm_amount", 0.0);
             recipient = intent.getStringExtra("paytm_recipient");
             note = intent.getStringExtra("paytm_note");
             category = intent.getStringExtra("paytm_category");
+            txnId = intent.getStringExtra("paytm_txnId");
+            // Clear processed intent extra to avoid duplicate handling
+            intent.removeExtra("paytm_amount");
         }
         // 2. From Deep Link URI (whosetab://snap?amount=350&to=Sharma)
-        else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
+        else if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
             Uri data = intent.getData();
             String amtStr = data.getQueryParameter("amount");
             if (amtStr != null) {
@@ -108,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
             note = data.getQueryParameter("note");
         }
         // 3. From System Share Intent (ACTION_SEND)
-        else if (Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())) {
+        else if (intent != null && Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())) {
             String sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
             if (sharedText != null) {
                 JSONObject parsed = PaytmNotificationListenerService.parseRawText(sharedText);
@@ -116,27 +127,59 @@ public class MainActivity extends AppCompatActivity {
                     amount = parsed.optDouble("amount", 0.0);
                     recipient = parsed.optString("recipient", "Merchant");
                     note = parsed.optString("rawText", "");
+                    category = parsed.optString("suggestedCategory", "General");
+                    txnId = parsed.optString("txnId", "");
                 }
             }
         }
 
         if (amount > 0) {
-            final double finalAmount = amount;
-            final String finalRecipient = recipient != null ? recipient : "Paytm Purchase";
-            final String finalNote = note != null ? note : "";
-            final String finalCategory = category != null ? category : "Groceries";
+            try {
+                JSONObject paymentObj = new JSONObject();
+                paymentObj.put("amount", amount);
+                paymentObj.put("recipient", recipient != null && !recipient.isEmpty() ? recipient : "Paytm Purchase");
+                paymentObj.put("note", note != null ? note : "");
+                paymentObj.put("suggestedCategory", category != null ? category : "Groceries");
+                paymentObj.put("txnId", txnId != null ? txnId : "");
+                paymentObj.put("timestamp", System.currentTimeMillis());
 
-            webView.post(() -> {
-                String js = String.format(
-                    "javascript:if(window.app && window.app.openSnapModalWithPaytm){ window.app.openSnapModalWithPaytm({ amount: %f, recipient: '%s', note: '%s', suggestedCategory: '%s' }); }",
-                    finalAmount,
-                    finalRecipient.replace("'", "\\'"),
-                    finalNote.replace("'", "\\'"),
-                    finalCategory
-                );
-                webView.evaluateJavascript(js, null);
-            });
+                PaymentDataStore.setPendingPayment(this, paymentObj);
+                dispatchPaymentToWeb(paymentObj);
+            } catch (Exception e) {
+                android.util.Log.e("WhoseTab", "Error building payment json", e);
+            }
+        } else {
+            // Check if store has a pending payment that hasn't been displayed yet
+            JSONObject pending = PaymentDataStore.getPendingPayment(this);
+            if (pending != null && pending.optDouble("amount", 0.0) > 0.0) {
+                dispatchPaymentToWeb(pending);
+            }
         }
+    }
+
+    private void dispatchPaymentToWeb(JSONObject payment) {
+        if (payment == null || webView == null) return;
+        final String jsonStr = payment.toString();
+
+        webView.post(() -> {
+            String js = String.format(
+                "(function() { " +
+                "  var data = %s; " +
+                "  if (window.app && typeof window.app.handleIncomingPayment === 'function') { " +
+                "    window.app.handleIncomingPayment(data); " +
+                "  } else { " +
+                "    window._pendingPayment = data; " +
+                "    window.addEventListener('DOMContentLoaded', function() { " +
+                "      if (window.app && typeof window.app.handleIncomingPayment === 'function') { " +
+                "        window.app.handleIncomingPayment(data); " +
+                "      } " +
+                "    }); " +
+                "  } " +
+                "})();",
+                jsonStr
+            );
+            webView.evaluateJavascript(js, null);
+        });
     }
 
     public void setKeepScreenOnEnabled(boolean enabled) {

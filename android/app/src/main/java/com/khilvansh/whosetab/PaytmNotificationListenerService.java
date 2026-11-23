@@ -112,6 +112,8 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
                 String category = parsed.optString("suggestedCategory", "General");
 
                 Log.d(TAG, "Parsed Paytm payment: ₹" + amount + " to " + recipient);
+                // Store in persistent store immediately so it survives any lifecycle transitions
+                PaymentDataStore.setPendingPayment(this, parsed);
                 triggerAppOpen(amount, recipient, txnId, category, fullBody);
             }
         }

@@ -12,6 +12,7 @@ import android.webkit.WebView;
 import android.widget.Toast;
 import androidx.core.app.NotificationManagerCompat;
 import java.util.Set;
+import org.json.JSONObject;
 
 public class WebAppInterface {
 
@@ -87,6 +88,18 @@ public class WebAppInterface {
     @JavascriptInterface
     public String getAppVersion() {
         return UpdateManager.getCurrentVersion(activity);
+    }
+
+    // --- PENDING PAYMENT BRIDGE (PERSISTENT & SAFE) ---
+    @JavascriptInterface
+    public String getPendingPayment() {
+        JSONObject obj = PaymentDataStore.getPendingPayment(activity);
+        return obj != null ? obj.toString() : "";
+    }
+
+    @JavascriptInterface
+    public void clearPendingPayment() {
+        PaymentDataStore.clearPendingPayment(activity);
     }
 
     @JavascriptInterface

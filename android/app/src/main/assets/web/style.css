@@ -806,6 +806,18 @@ body {
   color: #ffffff;
   border-color: var(--color-accent);
 }
+.person-chip.add-chip {
+  border: 1.5px dashed var(--color-accent);
+  background: transparent;
+  color: var(--color-accent);
+}
+.empty-contacts-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-1);
+  padding: var(--spacing-2) 0;
+}
 
 .split-toggle-group {
   display: grid;
