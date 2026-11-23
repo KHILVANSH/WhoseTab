@@ -85,8 +85,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Check if there is any pending payment awaiting consumption
-        handleIntentData(getIntent());
         // Live refresh scanner status & initial setup state in web UI
         if (webView != null) {
             webView.post(() -> {
@@ -111,8 +109,12 @@ public class MainActivity extends AppCompatActivity {
             note = intent.getStringExtra("paytm_note");
             category = intent.getStringExtra("paytm_category");
             txnId = intent.getStringExtra("paytm_txnId");
-            // Clear processed intent extra to avoid duplicate handling
+            // Clear processed intent extras to avoid duplicate handling
             intent.removeExtra("paytm_amount");
+            intent.removeExtra("paytm_recipient");
+            intent.removeExtra("paytm_note");
+            intent.removeExtra("paytm_category");
+            intent.removeExtra("paytm_txnId");
         }
         // 2. From Deep Link URI (whosetab://snap?amount=350&to=Sharma)
         else if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
@@ -123,6 +125,8 @@ public class MainActivity extends AppCompatActivity {
             }
             recipient = data.getQueryParameter("to");
             note = data.getQueryParameter("note");
+            intent.setData(null);
+            intent.setAction(null);
         }
         // 3. From System Share Intent (ACTION_SEND)
         else if (intent != null && Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())) {
@@ -137,6 +141,8 @@ public class MainActivity extends AppCompatActivity {
                     txnId = parsed.optString("txnId", "");
                 }
             }
+            intent.removeExtra(Intent.EXTRA_TEXT);
+            intent.setAction(null);
         }
 
         if (amount > 0) {
@@ -149,16 +155,26 @@ public class MainActivity extends AppCompatActivity {
                 paymentObj.put("txnId", txnId != null ? txnId : "");
                 paymentObj.put("timestamp", System.currentTimeMillis());
 
-                PaymentDataStore.setPendingPayment(this, paymentObj);
+                String sig = PaymentDataStore.getSignature(paymentObj);
+                if (PaymentDataStore.isPaymentDismissed(this, sig)) {
+                    android.util.Log.d("WhoseTab", "Payment " + sig + " already dismissed by user, skipping dispatch");
+                    return;
+                }
+
+                // Consume so it does not persist across future app relaunches
+                PaymentDataStore.consumePendingPayment(this);
                 dispatchPaymentToWeb(paymentObj);
             } catch (Exception e) {
                 android.util.Log.e("WhoseTab", "Error building payment json", e);
             }
         } else {
-            // Check if store has a pending payment that hasn't been displayed yet
-            JSONObject pending = PaymentDataStore.getPendingPayment(this);
+            // Check if store has a fresh pending payment (consume it immediately so it only dispatches once)
+            JSONObject pending = PaymentDataStore.consumePendingPayment(this);
             if (pending != null && pending.optDouble("amount", 0.0) > 0.0) {
-                dispatchPaymentToWeb(pending);
+                String sig = PaymentDataStore.getSignature(pending);
+                if (!PaymentDataStore.isPaymentDismissed(this, sig)) {
+                    dispatchPaymentToWeb(pending);
+                }
             }
         }
     }
@@ -206,8 +222,24 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack();
+        if (webView != null) {
+            webView.evaluateJavascript(
+                "(function() { " +
+                "  if (window.app && typeof window.app.handleBackPress === 'function') { " +
+                "    return window.app.handleBackPress(); " +
+                "  } " +
+                "  return false; " +
+                "})();",
+                result -> {
+                    if (!"true".equalsIgnoreCase(result)) {
+                        if (webView.canGoBack()) {
+                            webView.goBack();
+                        } else {
+                            super.onBackPressed();
+                        }
+                    }
+                }
+            );
         } else {
             super.onBackPressed();
         }

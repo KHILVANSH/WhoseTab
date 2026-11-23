@@ -46,6 +46,35 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private static boolean isServiceRunning = false;
+    private static final java.util.Map<String, Long> recentlyProcessedSignatures = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static boolean isRecentlyProcessed(String signature) {
+        if (signature == null || signature.isEmpty()) return false;
+        Long ts = recentlyProcessedSignatures.get(signature);
+        if (ts != null) {
+            // If seen within last 10 minutes, treat as duplicate
+            if (System.currentTimeMillis() - ts < 600000L) {
+                return true;
+            } else {
+                recentlyProcessedSignatures.remove(signature);
+            }
+        }
+        return false;
+    }
+
+    private static void recordProcessed(String signature) {
+        if (signature == null || signature.isEmpty()) return;
+        recentlyProcessedSignatures.put(signature, System.currentTimeMillis());
+        // Clean up old entries
+        if (recentlyProcessedSignatures.size() > 50) {
+            long now = System.currentTimeMillis();
+            for (java.util.Map.Entry<String, Long> e : recentlyProcessedSignatures.entrySet()) {
+                if (now - e.getValue() > 600000L) {
+                    recentlyProcessedSignatures.remove(e.getKey());
+                }
+            }
+        }
+    }
 
     public static boolean isRunning() {
         return isServiceRunning;
@@ -106,6 +135,13 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
             Log.d(TAG, "Payment candidate intercepted from pkg [" + pkg + "]: " + fullBody);
             JSONObject parsed = parseRawText(fullBody);
             if (parsed != null) {
+                String sig = PaymentDataStore.getSignature(parsed);
+                if (PaymentDataStore.isPaymentDismissed(this, sig) || isRecentlyProcessed(sig)) {
+                    Log.d(TAG, "Ignoring already dismissed or duplicate payment notification: " + sig);
+                    return;
+                }
+                recordProcessed(sig);
+
                 double amount = parsed.optDouble("amount", 0.0);
                 String recipient = parsed.optString("recipient", "Merchant");
                 String txnId = parsed.optString("txnId", "");

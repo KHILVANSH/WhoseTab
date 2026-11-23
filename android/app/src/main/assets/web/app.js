@@ -186,7 +186,7 @@ class WhoseTabApp {
           }
         } catch (e) {}
       }
-      this.dom.appVersionDisplay.textContent = 'v1.0.4';
+      this.dom.appVersionDisplay.textContent = 'v1.0.5';
     }
   }
 
@@ -423,7 +423,10 @@ class WhoseTabApp {
     if (this.dom.paytmDismissBtn) {
       this.dom.paytmDismissBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.detectedPaytmData = null;
+        if (this.detectedPaytmData) {
+          this.markPaymentDismissed(this.detectedPaytmData);
+          this.detectedPaytmData = null;
+        }
         this.dom.paytmNotificationBanner.classList.add('hidden');
         if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
           window.AndroidBridge.clearPendingPayment();
@@ -597,6 +600,45 @@ class WhoseTabApp {
     });
   }
 
+  // ================= PAYMENT DISMISSAL & SIGNATURE TRACKING =================
+  getPaymentSignature(data) {
+    if (!data) return '';
+    if (data.txnId && data.txnId.trim().length > 0) return data.txnId.trim();
+    const amt = (data.amount || 0).toFixed(2);
+    const rec = (data.recipient || '').trim().toLowerCase();
+    const note = (data.note || data.rawText || '').slice(0, 30);
+    return `${amt}_${rec}_${note}`;
+  }
+
+  isPaymentDismissed(data) {
+    const sig = this.getPaymentSignature(data);
+    if (!sig) return false;
+    try {
+      const list = JSON.parse(localStorage.getItem('whosetab_dismissed_payments') || '[]');
+      return list.includes(sig);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  markPaymentDismissed(data) {
+    const sig = this.getPaymentSignature(data);
+    if (!sig) return;
+    try {
+      let list = JSON.parse(localStorage.getItem('whosetab_dismissed_payments') || '[]');
+      if (!list.includes(sig)) {
+        list.push(sig);
+        if (list.length > 60) list = list.slice(list.length - 50);
+        localStorage.setItem('whosetab_dismissed_payments', JSON.stringify(list));
+      }
+    } catch (e) {}
+
+    // Synchronize dismissal with Android native storage
+    if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
+      window.AndroidBridge.clearPendingPayment();
+    }
+  }
+
   // ================= PAYTM DEEP LINK & CLIPBOARD =================
   checkUrlParameters() {
     const params = new URLSearchParams(window.location.search);
@@ -606,12 +648,15 @@ class WhoseTabApp {
 
     if (amount) {
       setTimeout(() => {
-        this.openSnapModalWithPaytm({
+        const item = {
           amount: parseFloat(amount),
           recipient: to || 'Paytm Purchase',
           note: note || '',
           suggestedCategory: 'Groceries'
-        });
+        };
+        if (!this.isPaymentDismissed(item)) {
+          this.openSnapModalWithPaytm(item);
+        }
       }, 250);
     }
   }
@@ -620,8 +665,11 @@ class WhoseTabApp {
     if (!navigator.clipboard || !navigator.clipboard.readText) return;
     try {
       const text = await navigator.clipboard.readText();
+      if (!text || text === this.lastHandledClipboardText) return;
+      this.lastHandledClipboardText = text;
+
       const parsed = this.parsePaytmString(text);
-      if (parsed) {
+      if (parsed && !this.isPaymentDismissed(parsed)) {
         this.showPaytmDetectedBanner(parsed);
       }
     } catch (e) {}
@@ -650,6 +698,7 @@ class WhoseTabApp {
   }
 
   showPaytmDetectedBanner(data) {
+    if (this.isPaymentDismissed(data)) return;
     this.detectedPaytmData = data;
     const recipient = data.recipient || 'Merchant';
     this.dom.paytmBannerDetail.textContent = `Paid ₹${data.amount.toFixed(2)} to ${recipient}`;
@@ -662,7 +711,13 @@ class WhoseTabApp {
     if (window._pendingPayment) {
       const data = window._pendingPayment;
       window._pendingPayment = null;
-      this.handleIncomingPayment(data);
+      if (!this.isPaymentDismissed(data)) {
+        this.handleIncomingPayment(data);
+      } else {
+        if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
+          window.AndroidBridge.clearPendingPayment();
+        }
+      }
       return;
     }
 
@@ -673,7 +728,11 @@ class WhoseTabApp {
         if (raw && raw.length > 2) {
           const data = JSON.parse(raw);
           if (data && data.amount > 0) {
-            this.handleIncomingPayment(data);
+            if (!this.isPaymentDismissed(data)) {
+              this.handleIncomingPayment(data);
+            } else {
+              window.AndroidBridge.clearPendingPayment();
+            }
           }
         }
       } catch (e) {
@@ -684,6 +743,13 @@ class WhoseTabApp {
 
   handleIncomingPayment(data) {
     if (!data || !data.amount || data.amount <= 0) return;
+    if (this.isPaymentDismissed(data)) {
+      if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
+        window.AndroidBridge.clearPendingPayment();
+      }
+      return;
+    }
+
     this.detectedPaytmData = data;
 
     // 1. Show the banner prompt in header
@@ -852,6 +918,20 @@ class WhoseTabApp {
   closeSnapModal() {
     this.dom.snapExpenseModal.classList.add('hidden');
     this.hideSnapError();
+
+    // If closing while a payment was detected, mark it as dismissed so it NEVER pops up again
+    if (this.detectedPaytmData) {
+      this.markPaymentDismissed(this.detectedPaytmData);
+      this.detectedPaytmData = null;
+    }
+
+    if (this.dom.paytmNotificationBanner) {
+      this.dom.paytmNotificationBanner.classList.add('hidden');
+    }
+
+    if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
+      window.AndroidBridge.clearPendingPayment();
+    }
   }
 
   renderModalPeopleChips() {
@@ -1005,14 +1085,44 @@ class WhoseTabApp {
 
     this.ledger.expenses.unshift(newExpense);
     this.saveLedger();
+    if (this.detectedPaytmData) {
+      this.markPaymentDismissed(this.detectedPaytmData);
+      this.detectedPaytmData = null;
+    }
     this.closeSnapModal();
-    this.dom.paytmNotificationBanner.classList.add('hidden');
-    this.detectedPaytmData = null;
+    if (this.dom.paytmNotificationBanner) {
+      this.dom.paytmNotificationBanner.classList.add('hidden');
+    }
     if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
       window.AndroidBridge.clearPendingPayment();
     }
 
     this.render();
+  }
+
+  // ================= HARDWARE BACK BUTTON HANDLER =================
+  handleBackPress() {
+    if (this.dom.snapExpenseModal && !this.dom.snapExpenseModal.classList.contains('hidden')) {
+      this.closeSnapModal();
+      return true;
+    }
+    if (this.dom.addPersonModal && !this.dom.addPersonModal.classList.contains('hidden')) {
+      this.closeAddPersonModal();
+      return true;
+    }
+    if (this.dom.settleModal && !this.dom.settleModal.classList.contains('hidden')) {
+      this.dom.settleModal.classList.add('hidden');
+      return true;
+    }
+    if (this.dom.updateModal && !this.dom.updateModal.classList.contains('hidden')) {
+      this.dom.updateModal.classList.add('hidden');
+      return true;
+    }
+    if (this.dom.setupModal && !this.dom.setupModal.classList.contains('hidden')) {
+      this.closeSetupModal();
+      return true;
+    }
+    return false;
   }
 
   handleAddPersonSubmit(e) {
