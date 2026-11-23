@@ -997,3 +997,18 @@ body {
 .btn-text:hover {
   color: var(--text-primary);
 }
+
+/* ================= Update Progress Bar ================= */
+.progress-bar-wrap {
+  width: 100%;
+  height: 8px;
+  background-color: var(--bg-surface-elevated);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-paytm), var(--color-accent));
+  transition: width 0.15s ease-out;
+}

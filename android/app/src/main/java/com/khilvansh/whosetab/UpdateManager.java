@@ -1,17 +1,19 @@
 package com.khilvansh.whosetab;
 
-import android.app.DownloadManager;
-import android.content.BroadcastReceiver;
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.provider.Settings;
 import android.widget.Toast;
 import androidx.core.content.FileProvider;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Scanner;
@@ -31,9 +33,9 @@ public class UpdateManager {
     public static String getCurrentVersion(Context context) {
         try {
             PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
-            return pInfo.versionName != null ? pInfo.versionName : "1.0.2";
+            return pInfo.versionName != null ? pInfo.versionName : "1.0.3";
         } catch (Exception e) {
-            return "1.0.2";
+            return "1.0.3";
         }
     }
 
@@ -107,45 +109,128 @@ public class UpdateManager {
     }
 
     public static void downloadAndInstallApk(Context context, String apkUrl) {
-        Toast.makeText(context, "Downloading WhoseTab update...", Toast.LENGTH_SHORT).show();
+        if (!(context instanceof Activity)) {
+            Toast.makeText(context, "Cannot update from background context", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Activity activity = (Activity) context;
 
-        try {
-            File targetDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-            if (targetDir != null && !targetDir.exists()) {
-                targetDir.mkdirs();
+        // Verify unknown sources install permission on Android 8.0+ before downloading
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!activity.getPackageManager().canRequestPackageInstalls()) {
+                Toast.makeText(activity, "Please allow WhoseTab to install updates", Toast.LENGTH_LONG).show();
+                Intent permissionIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + activity.getPackageName()));
+                permissionIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(permissionIntent);
+                return;
             }
-            // Delete prior update file if present so DownloadManager doesn't create duplicate numbered files
-            File existingFile = new File(targetDir, "WhoseTab-latest.apk");
-            if (existingFile.exists()) {
-                existingFile.delete();
-            }
+        }
 
-            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(apkUrl));
-            request.setTitle("WhoseTab Update");
-            request.setDescription("Downloading latest release APK");
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            request.setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, "WhoseTab-latest.apk");
+        Toast.makeText(activity, "Downloading update...", Toast.LENGTH_SHORT).show();
 
-            DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
-            if (manager == null) return;
-            long downloadId = manager.enqueue(request);
+        new Thread(() -> {
+            InputStream input = null;
+            OutputStream output = null;
+            HttpURLConnection connection = null;
 
-            context.registerReceiver(new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context c, Intent intent) {
-                    long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
-                    if (id == downloadId) {
-                        try {
-                            c.unregisterReceiver(this);
-                        } catch (Exception ignored) {}
-                        installDownloadedApk(c);
+            try {
+                URL url = new URL(apkUrl);
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setInstanceFollowRedirects(true);
+                connection.setRequestProperty("User-Agent", "WhoseTab-App");
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(30000);
+                connection.connect();
+
+                int responseCode = connection.getResponseCode();
+                // Follow redirects manually if needed (GitHub releases to AWS S3)
+                if (responseCode == HttpURLConnection.HTTP_MOVED_TEMP || responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == 307 || responseCode == 308) {
+                    String newUrl = connection.getHeaderField("Location");
+                    connection.disconnect();
+                    url = new URL(newUrl);
+                    connection = (HttpURLConnection) url.openConnection();
+                    connection.setRequestProperty("User-Agent", "WhoseTab-App");
+                    connection.setConnectTimeout(15000);
+                    connection.setReadTimeout(30000);
+                    connection.connect();
+                    responseCode = connection.getResponseCode();
+                }
+
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    throw new Exception("Server returned HTTP " + responseCode);
+                }
+
+                int fileLength = connection.getContentLength();
+                File targetDir = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                if (targetDir != null && !targetDir.exists()) {
+                    targetDir.mkdirs();
+                }
+                File apkFile = new File(targetDir, "WhoseTab-latest.apk");
+                if (apkFile.exists()) {
+                    apkFile.delete();
+                }
+
+                input = connection.getInputStream();
+                output = new FileOutputStream(apkFile);
+
+                byte[] buffer = new byte[8192];
+                long total = 0;
+                int count;
+                long lastProgressTime = 0;
+
+                while ((count = input.read(buffer)) != -1) {
+                    total += count;
+                    output.write(buffer, 0, count);
+
+                    long now = System.currentTimeMillis();
+                    if (fileLength > 0 && (now - lastProgressTime > 120)) {
+                        lastProgressTime = now;
+                        final int percent = (int) (total * 100 / fileLength);
+                        final double currentMb = total / (1024.0 * 1024.0);
+                        final double totalMb = fileLength / (1024.0 * 1024.0);
+                        activity.runOnUiThread(() -> {
+                            if (activity instanceof MainActivity) {
+                                String js = String.format(java.util.Locale.US,
+                                    "if(window.app && window.app.onDownloadProgress){ window.app.onDownloadProgress(%d, '%.1f', '%.1f'); }",
+                                    percent, currentMb, totalMb
+                                );
+                                ((MainActivity) activity).getWebView().evaluateJavascript(js, null);
+                            }
+                        });
                     }
                 }
-            }, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED);
 
-        } catch (Exception e) {
-            Toast.makeText(context, "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
+                output.flush();
+                output.close();
+                output = null;
+                input.close();
+                input = null;
+
+                // Download 100% complete! Trigger system installation prompt immediately on the active foreground Activity!
+                activity.runOnUiThread(() -> {
+                    if (activity instanceof MainActivity) {
+                        ((MainActivity) activity).getWebView().evaluateJavascript("if(window.app && window.app.onDownloadCompleted){ window.app.onDownloadCompleted(); }", null);
+                    }
+                    installDownloadedApk(activity);
+                });
+
+            } catch (Exception e) {
+                final String err = e.getMessage() != null ? e.getMessage() : "Download error";
+                activity.runOnUiThread(() -> {
+                    Toast.makeText(activity, "Update download failed: " + err, Toast.LENGTH_LONG).show();
+                    if (activity instanceof MainActivity) {
+                        String js = String.format("if(window.app && window.app.onDownloadError){ window.app.onDownloadError('%s'); }", err.replace("'", "\\'"));
+                        ((MainActivity) activity).getWebView().evaluateJavascript(js, null);
+                    }
+                });
+            } finally {
+                try {
+                    if (output != null) output.close();
+                    if (input != null) input.close();
+                } catch (Exception ignored) {}
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
     }
 
     public static void installDownloadedApk(Context context) {
@@ -159,7 +244,7 @@ public class UpdateManager {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!context.getPackageManager().canRequestPackageInstalls()) {
                 Toast.makeText(context, "Please allow WhoseTab to install updates", Toast.LENGTH_LONG).show();
-                Intent permissionIntent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.getPackageName()));
+                Intent permissionIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.getPackageName()));
                 permissionIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 context.startActivity(permissionIntent);
                 return;
@@ -169,7 +254,7 @@ public class UpdateManager {
         Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", apkFile);
         Intent installIntent = new Intent(Intent.ACTION_VIEW);
         installIntent.setDataAndType(apkUri, "application/vnd.android.package-archive");
-        installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         context.startActivity(installIntent);
     }
 

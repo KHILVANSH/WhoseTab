@@ -124,6 +124,9 @@ class WhoseTabApp {
       closeUpdateModalBtn: document.getElementById('closeUpdateModalBtn'),
       updateVersionTitle: document.getElementById('updateVersionTitle'),
       updateReleaseNotes: document.getElementById('updateReleaseNotes'),
+      updateProgressContainer: document.getElementById('updateProgressContainer'),
+      updateProgressBar: document.getElementById('updateProgressBar'),
+      updateProgressText: document.getElementById('updateProgressText'),
       downloadUpdateBtn: document.getElementById('downloadUpdateBtn'),
 
       exportDataBtn: document.getElementById('exportDataBtn'),
@@ -171,7 +174,7 @@ class WhoseTabApp {
           }
         } catch (e) {}
       }
-      this.dom.appVersionDisplay.textContent = 'v1.0.2';
+      this.dom.appVersionDisplay.textContent = 'v1.0.3';
     }
   }
 
@@ -426,11 +429,19 @@ class WhoseTabApp {
       this.dom.downloadUpdateBtn.addEventListener('click', () => {
         const apkUrl = this.dom.downloadUpdateBtn.dataset.apkUrl;
         if (window.AndroidBridge && window.AndroidBridge.downloadAndInstallUpdate) {
+          this.dom.downloadUpdateBtn.disabled = true;
+          this.dom.downloadUpdateBtn.textContent = 'Connecting...';
+          if (this.dom.updateProgressContainer) {
+            this.dom.updateProgressContainer.classList.remove('hidden');
+          }
+          if (this.dom.updateProgressText) {
+            this.dom.updateProgressText.textContent = 'Starting download...';
+          }
           window.AndroidBridge.downloadAndInstallUpdate(apkUrl);
         } else {
           window.open(apkUrl, '_blank');
+          this.dom.updateModal.classList.add('hidden');
         }
-        this.dom.updateModal.classList.add('hidden');
       });
     }
 
@@ -668,8 +679,6 @@ class WhoseTabApp {
     });
     this.dom.modalPeopleChips.appendChild(addChip);
   }
-    });
-  }
 
   // ================= DATA LOGIC & CALCULATIONS =================
   calculateNetBalances() {
@@ -820,7 +829,59 @@ class WhoseTabApp {
       this.dom.updateVersionTitle.textContent = `WhoseTab v${latestVersion}`;
       this.dom.updateReleaseNotes.textContent = releaseNotes || 'Latest features & optimizations.';
       this.dom.downloadUpdateBtn.dataset.apkUrl = apkUrl;
+      this.dom.downloadUpdateBtn.disabled = false;
+      this.dom.downloadUpdateBtn.textContent = 'Download & Install Now';
+      if (this.dom.updateProgressContainer) {
+        this.dom.updateProgressContainer.classList.add('hidden');
+      }
+      if (this.dom.updateProgressBar) {
+        this.dom.updateProgressBar.style.width = '0%';
+      }
+      if (this.dom.updateProgressText) {
+        this.dom.updateProgressText.textContent = 'Ready to download.';
+      }
       this.dom.updateModal.classList.remove('hidden');
+    }
+  }
+
+  onDownloadProgress(percent, currentMb, totalMb) {
+    if (this.dom.updateProgressContainer) {
+      this.dom.updateProgressContainer.classList.remove('hidden');
+    }
+    if (this.dom.updateProgressBar) {
+      this.dom.updateProgressBar.style.width = `${percent}%`;
+    }
+    if (this.dom.updateProgressText) {
+      this.dom.updateProgressText.textContent = `Downloading update: ${percent}% (${currentMb} MB / ${totalMb} MB)`;
+    }
+    if (this.dom.downloadUpdateBtn) {
+      this.dom.downloadUpdateBtn.disabled = true;
+      this.dom.downloadUpdateBtn.textContent = `Downloading ${percent}%...`;
+    }
+  }
+
+  onDownloadCompleted() {
+    if (this.dom.updateProgressBar) {
+      this.dom.updateProgressBar.style.width = '100%';
+    }
+    if (this.dom.updateProgressText) {
+      this.dom.updateProgressText.textContent = 'Download complete! Opening installation prompt...';
+    }
+    if (this.dom.downloadUpdateBtn) {
+      this.dom.downloadUpdateBtn.textContent = 'Installing...';
+    }
+    setTimeout(() => {
+      if (this.dom.updateModal) this.dom.updateModal.classList.add('hidden');
+    }, 3000);
+  }
+
+  onDownloadError(err) {
+    if (this.dom.updateProgressText) {
+      this.dom.updateProgressText.textContent = `Download failed: ${err}`;
+    }
+    if (this.dom.downloadUpdateBtn) {
+      this.dom.downloadUpdateBtn.disabled = false;
+      this.dom.downloadUpdateBtn.textContent = 'Retry Download';
     }
   }
 

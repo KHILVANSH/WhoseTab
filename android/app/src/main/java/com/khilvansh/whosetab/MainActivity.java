@@ -200,6 +200,10 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    public WebView getWebView() {
+        return webView;
+    }
+
     @Override
     public void onBackPressed() {
         if (webView.canGoBack()) {
