@@ -187,7 +187,7 @@ class WhoseTabApp {
           }
         } catch (e) {}
       }
-      this.dom.appVersionDisplay.textContent = 'v1.0.7';
+      this.dom.appVersionDisplay.textContent = 'v1.0.8';
     }
   }
 
@@ -748,6 +748,25 @@ class WhoseTabApp {
 
   handleIncomingPayment(data) {
     if (!data || !data.amount || data.amount <= 0) return;
+
+    // Defensive check against marketing/spam payloads
+    const raw = ((data.note || '') + ' ' + (data.rawText || '')).toLowerCase();
+    if (raw) {
+      const spamKeywords = [
+        'buy gold', 'paytm gold', 'gold price', 'drop in gold', 'per gram',
+        'cashback', 'scratch card', 'win up to', 'pre-approved', 'credit card',
+        'cibil', 'loan', 'mutual fund', 'sip', 'buy now', 'invest now',
+        'massive drop', 'rate drop'
+      ];
+      if (spamKeywords.some(kw => raw.includes(kw)) || /\/\s*(?:g|gm|kg|mo)/i.test(raw)) {
+        console.warn('Blocked promotional payload from opening expense modal:', raw);
+        if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
+          window.AndroidBridge.clearPendingPayment();
+        }
+        return;
+      }
+    }
+
     if (this.isPaymentDismissed(data)) {
       if (window.AndroidBridge && window.AndroidBridge.clearPendingPayment) {
         window.AndroidBridge.clearPendingPayment();
