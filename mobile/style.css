@@ -1306,6 +1306,70 @@ body {
   text-decoration: underline;
 }
 .split-warning-row {
+  font-size: 0.74rem;
+  color: #f59e0b;
+}
+
+/* ================= Repayment Confirmation Modal ================= */
+.repayment-banner {
+  text-align: center;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-3);
+}
+.repayment-amount-display {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #10b981;
+  letter-spacing: -0.5px;
+  margin: var(--spacing-1) 0;
+}
+.repayment-balance-preview {
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-3);
+  font-size: 0.88rem;
+}
+.repayment-calc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  color: var(--text-secondary);
+}
+.repayment-calc-row.total-row {
+  border-top: 1px dashed var(--border-subtle);
+  margin-top: 6px;
+  padding-top: 6px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.repayment-calc-val.positive {
+  color: #10b981;
+  font-weight: 700;
+}
+.repayment-calc-val.negative {
+  color: #ef4444;
+  font-weight: 700;
+}
+.btn-edit-person {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background-color 0.15s;
+}
+.btn-edit-person:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-surface-elevated);
+}
   color: #fca5a5;
   font-size: 0.75rem;
   font-weight: 700;

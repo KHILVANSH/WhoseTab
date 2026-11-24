@@ -36,6 +36,12 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
         "(?i)(?:₹|rs\\.?|inr)\\s*[0-9,.]+\\s*/\\s*(?:g|gm|kg|mo|month|yr|year|unit)"
     );
 
+    // Incoming repayment patterns
+    private static final Pattern[] INCOMING_AMOUNT_PATTERNS = new Pattern[] {
+        Pattern.compile("(?i)(?:received|credited(?: with| by)?|sent you)\\s*(?:₹|rs\\.?|inr)?\\s*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]{1,2})?)"),
+        Pattern.compile("(?i)(?:₹|rs\\.?|inr)\\s*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]{1,2})?)\\s*(?:received|credited)")
+    };
+
     // Matches valid payment amounts, but NOT rate quotes like ₹17,867/g
     private static final Pattern AMOUNT_PATTERN = Pattern.compile(
         "(?i)(?:paid|sent|transfer(?:red)?(?: of)?|debited (?:by|from)?|payment(?: of)?|rs\\.?|inr|₹)\\s*(?:rs\\.?|inr|₹)?\\s*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]{1,2})?)(?!\\s*/\\s*(?:g|gm|kg|mo|month|yr|year))"
@@ -123,7 +129,7 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
             "buy now", "shop now", "invest now", "apply now", "order now", "book now", "recharge now",
             "otp", "one time password", "verification code", "do not share", "secret code",
             "rate drop", "massive drop", "price drop", "special offer", "limited period",
-            "received ₹", "received rs", "credited to", "refund"
+            "refund"
         };
 
         for (String kw : promoKeywords) {
@@ -135,6 +141,96 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
         }
 
         return false;
+    }
+
+    public static boolean isIncomingPayment(String fullText) {
+        if (fullText == null || fullText.trim().isEmpty()) return false;
+        String lower = fullText.toLowerCase();
+
+        String[] creditKeywords = new String[] {
+            "received", "credited", "sent you", "credit alert"
+        };
+        boolean hasCredit = false;
+        for (String kw : creditKeywords) {
+            if (lower.contains(kw)) {
+                hasCredit = true;
+                break;
+            }
+        }
+        if (!hasCredit) return false;
+
+        return !isMarketingOrSpam(fullText);
+    }
+
+    private static String extractSender(String text) {
+        if (text == null || text.trim().isEmpty()) return null;
+
+        // 1. "from Bhuvnesh" or "from VPA *7113@wahdfcbank"
+        Matcher m1 = Pattern.compile("(?i)(?:from|by\\s+vpa)\\s+(?:vpa\\s+)?([A-Za-z0-9*@._-]+(?:\\s+[A-Za-z0-9*@._-]+)?)(?=(?:\\s+(?:deposited|credited|via|on|in|into|ref|upi|\\.)|[.,(]|$))").matcher(text);
+        if (m1.find() && m1.group(1) != null) {
+            String s = m1.group(1).replaceAll("(?i)(?:Deposited|via|credited).*$", "").trim();
+            if (s.length() > 1 && !s.matches("(?i)^(hdfc|sbi|icici|axis|bank|account|a/c|vpa|inr|rs|upi|[0-9.]+)$")) {
+                return s;
+            }
+        }
+
+        // 2. "Bhuvnesh sent you..."
+        Matcher m2 = Pattern.compile("(?i)([A-Za-z0-9&'._-]+(?:\\s+[A-Za-z0-9&'._-]+)?)\\s+sent you").matcher(text);
+        if (m2.find() && m2.group(1) != null) {
+            String s = m2.group(1).replaceAll("(?i)^Google\\s+Pay\\s+", "").trim();
+            if (s.length() > 1) return s;
+        }
+
+        // 3. UPI/.../kavya@okicici/... in bank SMS
+        Matcher m3 = Pattern.compile("(?i)upi/(?:[0-9]+)/([A-Za-z0-9*@._-]+)").matcher(text);
+        if (m3.find() && m3.group(1) != null) {
+            return m3.group(1).trim();
+        }
+
+        // 4. VPA *7113@wahdfcbank
+        Matcher m4 = Pattern.compile("(?i)vpa\\s+([A-Za-z0-9*@._-]+)").matcher(text);
+        if (m4.find() && m4.group(1) != null) {
+            return m4.group(1).trim();
+        }
+
+        return null;
+    }
+
+    public static JSONObject parseIncomingPayment(CharSequence titleSeq, CharSequence textSeq, String fullBody) {
+        if (fullBody == null || !isIncomingPayment(fullBody)) return null;
+
+        double amount = 0.0;
+        for (Pattern pat : INCOMING_AMOUNT_PATTERNS) {
+            Matcher m = pat.matcher(fullBody);
+            if (m.find() && m.group(1) != null) {
+                try {
+                    amount = Double.parseDouble(m.group(1).replace(",", ""));
+                    if (amount > 0) break;
+                } catch (Exception ignored) {}
+            }
+        }
+        if (amount <= 0.0) return null;
+
+        String title = titleSeq != null ? titleSeq.toString() : "";
+        String text = textSeq != null ? textSeq.toString() : "";
+
+        String sender = extractSender(text);
+        if (sender == null) sender = extractSender(title);
+        if (sender == null) sender = extractSender(fullBody);
+        if (sender == null || sender.isEmpty()) sender = "Someone";
+        if (sender.length() > 40) sender = sender.substring(0, 40);
+
+        try {
+            JSONObject obj = new JSONObject();
+            obj.put("type", "repayment");
+            obj.put("amount", amount);
+            obj.put("sender", sender);
+            obj.put("rawText", fullBody);
+            obj.put("timestamp", System.currentTimeMillis());
+            return obj;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public static boolean hasPaymentActionIndicator(String text) {
@@ -205,7 +301,29 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
         String fullBody = fullText.toString().trim();
         if (fullBody.isEmpty()) return;
 
-        // Check package and content
+        // 1. Strict rejection of marketing, spam, and promo
+        if (isMarketingOrSpam(fullBody)) {
+            Log.d(TAG, "Rejected non-payment/promo notification from pkg [" + pkg + "]: " + fullBody);
+            return;
+        }
+
+        // 2. Check if INCOMING REPAYMENT (Payback from contact via Paytm, PhonePe, GPay, or Bank SMS)
+        JSONObject incoming = parseIncomingPayment(title, text, fullBody);
+        if (incoming != null) {
+            String sig = PaymentDataStore.getRepaymentSignature(incoming);
+            if (PaymentDataStore.isRepaymentDismissed(this, sig) || isRecentlyProcessed(sig)) {
+                Log.d(TAG, "Ignoring already dismissed or duplicate repayment notification: " + sig);
+                return;
+            }
+            recordProcessed(sig);
+
+            Log.d(TAG, "Parsed incoming repayment: ₹" + incoming.optDouble("amount") + " from " + incoming.optString("sender"));
+            PaymentDataStore.setPendingRepayment(this, incoming);
+            triggerRepaymentAlert(incoming, fullBody);
+            return;
+        }
+
+        // 3. Check if OUTGOING PAYMENT (Expense)
         boolean isSupportedApp = pkg.contains("paytm") || pkg.contains("phonepe") 
                 || pkg.contains("google.android.apps.nbu.paisa") || pkg.contains("bhim");
 
@@ -213,9 +331,7 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
             return;
         }
 
-        // Strict rejection of marketing, spam, and non-outgoing transactions
-        if (isMarketingOrSpam(fullBody) || !hasPaymentActionIndicator(fullBody)) {
-            Log.d(TAG, "Rejected non-payment/promo notification from pkg [" + pkg + "]: " + fullBody);
+        if (!hasPaymentActionIndicator(fullBody)) {
             return;
         }
 
@@ -370,6 +486,68 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
             } catch (Exception e) {
                 Log.e(TAG, "Background activity launch exception: " + e.getMessage());
                 // Overlay fallback: start via activity
+                try {
+                    startActivity(openIntent);
+                } catch (Exception ignored) {}
+            }
+        }, delayMs);
+    }
+
+    private void triggerRepaymentAlert(JSONObject incoming, String raw) {
+        double amount = incoming.optDouble("amount", 0.0);
+        String sender = incoming.optString("sender", "Someone");
+
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        long delayMs = prefs.getLong(KEY_OPEN_DELAY, 0);
+
+        Intent openIntent = new Intent(this, MainActivity.class);
+        openIntent.putExtra("paytm_type", "repayment");
+        openIntent.putExtra("paytm_amount", amount);
+        openIntent.putExtra("paytm_sender", sender);
+        openIntent.putExtra("paytm_note", raw);
+        openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP 
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP 
+                | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+            this,
+            (int) System.currentTimeMillis(),
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+        );
+
+        // Heads-up Notification with FullScreenIntent
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID_ALERTS)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("WhoseTab — Repayment: ₹" + String.format("%.2f", amount))
+            .setContentText("Received from " + sender + ". Tap to confirm settling balance.")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .setDefaults(Notification.DEFAULT_ALL)
+            .setContentIntent(pendingIntent)
+            .setFullScreenIntent(pendingIntent, true);
+
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) {
+            nm.notify((int) System.currentTimeMillis(), builder.build());
+        }
+
+        handler.postDelayed(() -> {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ActivityOptions options = ActivityOptions.makeBasic();
+                    options.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                    try {
+                        pendingIntent.send(this, 0, null, null, null, null, options.toBundle());
+                    } catch (Exception ex) {
+                        startActivity(openIntent, options.toBundle());
+                    }
+                } else {
+                    startActivity(openIntent);
+                }
+            } catch (Exception e) {
                 try {
                     startActivity(openIntent);
                 } catch (Exception ignored) {}

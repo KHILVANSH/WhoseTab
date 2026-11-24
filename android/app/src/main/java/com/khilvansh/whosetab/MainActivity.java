@@ -96,6 +96,39 @@ public class MainActivity extends AppCompatActivity {
     private void handleIntentData(Intent intent) {
         if (webView == null) return;
 
+        // 0. From Repayment extras (PaytmNotificationListenerService)
+        if (intent != null && intent.hasExtra("paytm_type") && "repayment".equals(intent.getStringExtra("paytm_type"))) {
+            double rAmount = intent.getDoubleExtra("paytm_amount", 0.0);
+            String rSender = intent.getStringExtra("paytm_sender");
+            String rNote = intent.getStringExtra("paytm_note");
+            intent.removeExtra("paytm_type");
+            intent.removeExtra("paytm_amount");
+            intent.removeExtra("paytm_sender");
+            intent.removeExtra("paytm_note");
+
+            if (rAmount > 0) {
+                try {
+                    JSONObject rObj = new JSONObject();
+                    rObj.put("type", "repayment");
+                    rObj.put("amount", rAmount);
+                    rObj.put("sender", rSender != null ? rSender : "Someone");
+                    rObj.put("note", rNote != null ? rNote : "");
+                    rObj.put("timestamp", System.currentTimeMillis());
+
+                    String sig = PaymentDataStore.getRepaymentSignature(rObj);
+                    if (PaymentDataStore.isRepaymentDismissed(this, sig)) {
+                        return;
+                    }
+
+                    PaymentDataStore.consumePendingRepayment(this);
+                    dispatchRepaymentToWeb(rObj);
+                    return;
+                } catch (Exception e) {
+                    android.util.Log.e("WhoseTab", "Error building repayment json", e);
+                }
+            }
+        }
+
         double amount = 0.0;
         String recipient = "";
         String note = "";
@@ -168,7 +201,17 @@ public class MainActivity extends AppCompatActivity {
                 android.util.Log.e("WhoseTab", "Error building payment json", e);
             }
         } else {
-            // Check if store has a fresh pending payment (consume it immediately so it only dispatches once)
+            // 1. Check if store has a fresh pending repayment
+            JSONObject pendingRepay = PaymentDataStore.consumePendingRepayment(this);
+            if (pendingRepay != null && pendingRepay.optDouble("amount", 0.0) > 0.0) {
+                String sig = PaymentDataStore.getRepaymentSignature(pendingRepay);
+                if (!PaymentDataStore.isRepaymentDismissed(this, sig)) {
+                    dispatchRepaymentToWeb(pendingRepay);
+                    return;
+                }
+            }
+
+            // 2. Check if store has a fresh pending payment (consume it immediately so it only dispatches once)
             JSONObject pending = PaymentDataStore.consumePendingPayment(this);
             if (pending != null && pending.optDouble("amount", 0.0) > 0.0) {
                 String sig = PaymentDataStore.getSignature(pending);
@@ -177,6 +220,31 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }
+    }
+
+    private void dispatchRepaymentToWeb(JSONObject repayment) {
+        if (repayment == null || webView == null) return;
+        final String jsonStr = repayment.toString();
+
+        webView.post(() -> {
+            String js = String.format(
+                "(function() { " +
+                "  var data = %s; " +
+                "  if (window.app && typeof window.app.handleRepaymentDetected === 'function') { " +
+                "    window.app.handleRepaymentDetected(data); " +
+                "  } else { " +
+                "    window._pendingRepayment = data; " +
+                "    window.addEventListener('DOMContentLoaded', function() { " +
+                "      if (window.app && typeof window.app.handleRepaymentDetected === 'function') { " +
+                "        window.app.handleRepaymentDetected(data); " +
+                "      } " +
+                "    }); " +
+                "  } " +
+                "})();",
+                jsonStr
+            );
+            webView.evaluateJavascript(js, null);
+        });
     }
 
     private void dispatchPaymentToWeb(JSONObject payment) {

@@ -73,6 +73,12 @@ class WhoseTabApp {
       paytmSnapBtn: document.getElementById('paytmSnapBtn'),
       paytmDismissBtn: document.getElementById('paytmDismissBtn'),
 
+      repaymentNotificationBanner: document.getElementById('repaymentNotificationBanner'),
+      repaymentBannerBody: document.getElementById('repaymentBannerBody'),
+      repaymentBannerDetail: document.getElementById('repaymentBannerDetail'),
+      repaymentConfirmActionBtn: document.getElementById('repaymentConfirmActionBtn'),
+      repaymentDismissBannerBtn: document.getElementById('repaymentDismissBannerBtn'),
+
       totalOwedToMe: document.getElementById('totalOwedToMe'),
       totalIOwe: document.getElementById('totalIOwe'),
       activeDebtorsCount: document.getElementById('activeDebtorsCount'),
@@ -110,6 +116,16 @@ class WhoseTabApp {
       addPersonModal: document.getElementById('addPersonModal'),
       closeAddPersonModalBtn: document.getElementById('closeAddPersonModalBtn'),
       addPersonForm: document.getElementById('addPersonForm'),
+      personPhone: document.getElementById('personPhone'),
+
+      editPersonModal: document.getElementById('editPersonModal'),
+      closeEditPersonModalBtn: document.getElementById('closeEditPersonModalBtn'),
+      editPersonForm: document.getElementById('editPersonForm'),
+      editPersonId: document.getElementById('editPersonId'),
+      editPersonName: document.getElementById('editPersonName'),
+      editPersonPhone: document.getElementById('editPersonPhone'),
+      editPersonUpi: document.getElementById('editPersonUpi'),
+      deletePersonBtn: document.getElementById('deletePersonBtn'),
 
       settleModal: document.getElementById('settleModal'),
       closeSettleModalBtn: document.getElementById('closeSettleModalBtn'),
@@ -117,6 +133,18 @@ class WhoseTabApp {
       settlePersonInfo: document.getElementById('settlePersonInfo'),
       settleAmount: document.getElementById('settleAmount'),
       settleNotes: document.getElementById('settleNotes'),
+
+      confirmRepaymentModal: document.getElementById('confirmRepaymentModal'),
+      closeConfirmRepaymentModalBtn: document.getElementById('closeConfirmRepaymentModalBtn'),
+      confirmRepaymentForm: document.getElementById('confirmRepaymentForm'),
+      repaymentAmountDisplay: document.getElementById('repaymentAmountDisplay'),
+      repaymentSourceDetail: document.getElementById('repaymentSourceDetail'),
+      repaymentPersonSelect: document.getElementById('repaymentPersonSelect'),
+      repaymentBalancePreview: document.getElementById('repaymentBalancePreview'),
+      repaymentAmountInput: document.getElementById('repaymentAmountInput'),
+      repaymentNotesInput: document.getElementById('repaymentNotesInput'),
+      confirmRepaymentBtn: document.getElementById('confirmRepaymentBtn'),
+      dismissRepaymentBtn: document.getElementById('dismissRepaymentBtn'),
 
       grantNotificationAccessBtn: document.getElementById('grantNotificationAccessBtn'),
       grantOverlayAccessBtn: document.getElementById('grantOverlayAccessBtn'),
@@ -187,7 +215,7 @@ class WhoseTabApp {
           }
         } catch (e) {}
       }
-      this.dom.appVersionDisplay.textContent = 'v1.0.8';
+      this.dom.appVersionDisplay.textContent = 'v1.0.9';
     }
   }
 
@@ -433,6 +461,64 @@ class WhoseTabApp {
           window.AndroidBridge.clearPendingPayment();
         }
       });
+    }
+
+    // Repayment Banner Actions
+    if (this.dom.repaymentBannerBody) {
+      this.dom.repaymentBannerBody.addEventListener('click', () => {
+        if (this.detectedRepaymentData) {
+          this.dom.repaymentNotificationBanner.classList.add('hidden');
+          this.openConfirmRepaymentModal(this.detectedRepaymentData);
+        }
+      });
+    }
+
+    if (this.dom.repaymentConfirmActionBtn) {
+      this.dom.repaymentConfirmActionBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.detectedRepaymentData) {
+          this.dom.repaymentNotificationBanner.classList.add('hidden');
+          this.openConfirmRepaymentModal(this.detectedRepaymentData);
+        }
+      });
+    }
+
+    if (this.dom.repaymentDismissBannerBtn) {
+      this.dom.repaymentDismissBannerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.dismissRepaymentData();
+      });
+    }
+
+    // Repayment Modal Events
+    if (this.dom.closeConfirmRepaymentModalBtn) {
+      this.dom.closeConfirmRepaymentModalBtn.addEventListener('click', () => this.closeConfirmRepaymentModal());
+    }
+    if (this.dom.dismissRepaymentBtn) {
+      this.dom.dismissRepaymentBtn.addEventListener('click', () => {
+        this.dismissRepaymentData();
+        this.closeConfirmRepaymentModal();
+      });
+    }
+    if (this.dom.confirmRepaymentForm) {
+      this.dom.confirmRepaymentForm.addEventListener('submit', (e) => this.handleConfirmRepaymentSubmit(e));
+    }
+    if (this.dom.repaymentPersonSelect) {
+      this.dom.repaymentPersonSelect.addEventListener('change', () => this.updateRepaymentPreview());
+    }
+    if (this.dom.repaymentAmountInput) {
+      this.dom.repaymentAmountInput.addEventListener('input', () => this.updateRepaymentPreview());
+    }
+
+    // Edit Person Modal Events
+    if (this.dom.closeEditPersonModalBtn) {
+      this.dom.closeEditPersonModalBtn.addEventListener('click', () => this.closeEditPersonModal());
+    }
+    if (this.dom.editPersonForm) {
+      this.dom.editPersonForm.addEventListener('submit', (e) => this.handleEditPersonSubmit(e));
+    }
+    if (this.dom.deletePersonBtn) {
+      this.dom.deletePersonBtn.addEventListener('click', () => this.handleDeletePersonSubmit());
     }
 
     // Check for Updates (Direct GitHub Releases, no tokens needed)
@@ -712,6 +798,37 @@ class WhoseTabApp {
 
   // ================= PENDING PAYMENT & AUTO-POPUP CONTROLLER =================
   checkPendingPayment() {
+    // 0. Check pending repayment (incoming settlement)
+    if (window._pendingRepayment) {
+      const rData = window._pendingRepayment;
+      window._pendingRepayment = null;
+      if (!this.isRepaymentDismissed(rData)) {
+        this.handleRepaymentDetected(rData);
+        return;
+      } else {
+        if (window.AndroidBridge && window.AndroidBridge.clearPendingRepayment) {
+          window.AndroidBridge.clearPendingRepayment();
+        }
+      }
+    } else if (window.AndroidBridge && window.AndroidBridge.getPendingRepayment) {
+      try {
+        const rawR = window.AndroidBridge.getPendingRepayment();
+        if (rawR && rawR.length > 2) {
+          const rData = JSON.parse(rawR);
+          if (rData && rData.amount > 0) {
+            if (!this.isRepaymentDismissed(rData)) {
+              this.handleRepaymentDetected(rData);
+              return;
+            } else {
+              window.AndroidBridge.clearPendingRepayment();
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching pending repayment from bridge', e);
+      }
+    }
+
     // 1. Check window._pendingPayment set by native script
     if (window._pendingPayment) {
       const data = window._pendingPayment;
@@ -744,6 +861,29 @@ class WhoseTabApp {
         console.error('Error fetching pending payment from bridge', e);
       }
     }
+  }
+
+  handleRepaymentDetected(data) {
+    if (!data || !data.amount || data.amount <= 0) return;
+    if (this.isRepaymentDismissed(data)) {
+      if (window.AndroidBridge && window.AndroidBridge.clearPendingRepayment) {
+        window.AndroidBridge.clearPendingRepayment();
+      }
+      return;
+    }
+
+    this.detectedRepaymentData = data;
+
+    // Show floating banner in header
+    if (this.dom.repaymentNotificationBanner) {
+      if (this.dom.repaymentBannerDetail) {
+        this.dom.repaymentBannerDetail.textContent = `₹${parseFloat(data.amount).toFixed(2)} from ${data.sender || 'Sender'}`;
+      }
+      this.dom.repaymentNotificationBanner.classList.remove('hidden');
+    }
+
+    // Open confirmation popup
+    this.openConfirmRepaymentModal(data);
   }
 
   handleIncomingPayment(data) {
@@ -1325,6 +1465,14 @@ class WhoseTabApp {
 
   // ================= HARDWARE BACK BUTTON HANDLER =================
   handleBackPress() {
+    if (this.dom.confirmRepaymentModal && !this.dom.confirmRepaymentModal.classList.contains('hidden')) {
+      this.closeConfirmRepaymentModal();
+      return true;
+    }
+    if (this.dom.editPersonModal && !this.dom.editPersonModal.classList.contains('hidden')) {
+      this.closeEditPersonModal();
+      return true;
+    }
     if (this.dom.snapExpenseModal && !this.dom.snapExpenseModal.classList.contains('hidden')) {
       this.closeSnapModal();
       return true;
@@ -1352,6 +1500,8 @@ class WhoseTabApp {
     e.preventDefault();
     const nameInput = document.getElementById('personName');
     const name = nameInput ? nameInput.value.trim() : '';
+    const phoneInput = document.getElementById('personPhone');
+    const phone = phoneInput ? phoneInput.value.trim() : '';
     const rel = document.querySelector('input[name="relationship"]:checked')?.value || 'Friend';
     const upiInput = document.getElementById('personUpi');
     const upi = upiInput ? upiInput.value.trim() : '';
@@ -1362,6 +1512,7 @@ class WhoseTabApp {
       id: 'p_' + Date.now(),
       name,
       relationship: rel,
+      phone: phone || null,
       upi: upi || null,
       createdAt: new Date().toISOString()
     };
@@ -1421,6 +1572,299 @@ class WhoseTabApp {
     this.saveLedger();
     this.dom.settleForm.reset();
     this.dom.settleModal.classList.add('hidden');
+    this.render();
+  }
+
+  // ================= EDIT / DELETE CONTACT =================
+  openEditPersonModal(personId) {
+    const person = this.ledger.people.find(p => p.id === personId);
+    if (!person || !this.dom.editPersonModal) return;
+
+    if (this.dom.editPersonId) this.dom.editPersonId.value = person.id;
+    if (this.dom.editPersonName) this.dom.editPersonName.value = person.name;
+    if (this.dom.editPersonPhone) this.dom.editPersonPhone.value = person.phone || '';
+    if (this.dom.editPersonUpi) this.dom.editPersonUpi.value = person.upi || '';
+
+    const radios = document.querySelectorAll('input[name="editRelationship"]');
+    radios.forEach(r => {
+      r.checked = (r.value === person.relationship);
+      const parentLabel = r.closest('.split-btn');
+      if (parentLabel) {
+        if (r.checked) parentLabel.classList.add('active');
+        else parentLabel.classList.remove('active');
+      }
+    });
+
+    this.dom.editPersonModal.classList.remove('hidden');
+  }
+
+  closeEditPersonModal() {
+    if (this.dom.editPersonModal) {
+      this.dom.editPersonModal.classList.add('hidden');
+    }
+  }
+
+  handleEditPersonSubmit(e) {
+    e.preventDefault();
+    const id = this.dom.editPersonId ? this.dom.editPersonId.value : null;
+    const person = this.ledger.people.find(p => p.id === id);
+    if (!person) return;
+
+    const name = this.dom.editPersonName ? this.dom.editPersonName.value.trim() : '';
+    if (!name) return;
+
+    const phone = (this.dom.editPersonPhone ? this.dom.editPersonPhone.value.trim() : '') || null;
+    const upi = (this.dom.editPersonUpi ? this.dom.editPersonUpi.value.trim() : '') || null;
+    const relRadio = document.querySelector('input[name="editRelationship"]:checked');
+    const rel = relRadio ? relRadio.value : person.relationship;
+
+    person.name = name;
+    person.phone = phone;
+    person.upi = upi;
+    person.relationship = rel;
+
+    this.saveLedger();
+    this.closeEditPersonModal();
+    this.render();
+  }
+
+  handleDeletePersonSubmit() {
+    const id = this.dom.editPersonId ? this.dom.editPersonId.value : null;
+    const person = this.ledger.people.find(p => p.id === id);
+    if (!person) return;
+
+    if (confirm(`Remove ${person.name} from contacts? Past expenses and settlements will remain preserved.`)) {
+      this.ledger.people = this.ledger.people.filter(p => p.id !== id);
+      this.selectedPersonIds.delete(id);
+      this.saveLedger();
+      this.closeEditPersonModal();
+      this.render();
+    }
+  }
+
+  // ================= REPAYMENT SETTLEMENT & POPUP =================
+  findMatchingContact(sender) {
+    if (!sender || !this.ledger.people.length) return null;
+    const s = sender.trim().toLowerCase();
+
+    // 1. Phone number match
+    const digits = s.replace(/[^0-9]/g, '');
+    if (digits.length >= 10) {
+      const p = this.ledger.people.find(person => person.phone && person.phone.replace(/[^0-9]/g, '').endsWith(digits.slice(-10)));
+      if (p) return p;
+    }
+
+    // 2. UPI / VPA match
+    const pUpi = this.ledger.people.find(person => {
+      if (!person.upi) return false;
+      const u = person.upi.toLowerCase();
+      return s.includes(u) || u.includes(s);
+    });
+    if (pUpi) return pUpi;
+
+    // 3. Name normalization
+    const norm = str => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanS = norm(s);
+
+    // Exact name match
+    let pName = this.ledger.people.find(person => norm(person.name) === cleanS);
+    if (pName) return pName;
+
+    // First name match
+    pName = this.ledger.people.find(person => {
+      const first = norm(person.name.split(' ')[0]);
+      return cleanS.includes(first) || first.includes(cleanS.split(' ')[0]);
+    });
+    if (pName) return pName;
+
+    // Phonetic / 'h' spelling tolerance (e.g. Bhuvnesh vs Buvnesh)
+    pName = this.ledger.people.find(person => {
+      const na = norm(person.name).replace(/h/g, '');
+      const nb = cleanS.replace(/h/g, '');
+      return na === nb || na.includes(nb) || nb.includes(na);
+    });
+    if (pName) return pName;
+
+    return null;
+  }
+
+  openConfirmRepaymentModal(data) {
+    if (!data || !this.dom.confirmRepaymentModal) return;
+    this.detectedRepaymentData = data;
+
+    const amt = parseFloat(data.amount) || 0;
+    const sender = data.sender || 'Someone';
+
+    if (this.dom.repaymentAmountDisplay) {
+      this.dom.repaymentAmountDisplay.textContent = `₹${amt.toFixed(2)}`;
+    }
+    if (this.dom.repaymentAmountInput) {
+      this.dom.repaymentAmountInput.value = amt.toFixed(2);
+    }
+    if (this.dom.repaymentSourceDetail) {
+      this.dom.repaymentSourceDetail.textContent = `Received from ${sender}`;
+    }
+    if (this.dom.repaymentNotesInput) {
+      this.dom.repaymentNotesInput.value = `Repayment from ${sender}`;
+    }
+
+    const select = this.dom.repaymentPersonSelect;
+    if (select) {
+      select.innerHTML = '';
+      if (this.ledger.people.length === 0) {
+        select.innerHTML = '<option value="">No contacts in tab yet</option>';
+      } else {
+        const matched = this.findMatchingContact(sender);
+        const balances = this.calculateNetBalances();
+
+        this.ledger.people.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          const bal = balances[p.id] || 0;
+          opt.textContent = `${p.name} (${p.relationship}) — ${bal > 0 ? `Owes ₹${bal.toFixed(2)}` : 'Settled'}`;
+          if (matched && p.id === matched.id) {
+            opt.selected = true;
+          }
+          select.appendChild(opt);
+        });
+
+        if (!matched && select.options.length > 0) {
+          const debtorPerson = this.ledger.people.find(p => (balances[p.id] || 0) > 0);
+          if (debtorPerson) select.value = debtorPerson.id;
+        }
+      }
+    }
+
+    this.updateRepaymentPreview();
+    this.dom.confirmRepaymentModal.classList.remove('hidden');
+  }
+
+  updateRepaymentPreview() {
+    const preview = this.dom.repaymentBalancePreview;
+    if (!preview) return;
+
+    const personId = this.dom.repaymentPersonSelect ? this.dom.repaymentPersonSelect.value : null;
+    const amount = parseFloat(this.dom.repaymentAmountInput ? this.dom.repaymentAmountInput.value : 0) || 0;
+
+    const person = this.ledger.people.find(p => p.id === personId);
+    if (!person) {
+      preview.innerHTML = '<div class="text-sm text-muted text-center">Select a contact to preview updated balance.</div>';
+      return;
+    }
+
+    const balances = this.calculateNetBalances();
+    const currentDebt = balances[person.id] || 0;
+    const newDebt = currentDebt - amount;
+
+    preview.innerHTML = `
+      <div class="repayment-calc-row">
+        <span>${person.name}'s Current Balance</span>
+        <span class="repayment-calc-val ${currentDebt > 0 ? 'negative' : 'positive'}">
+          ${currentDebt > 0 ? `Owes ₹${currentDebt.toFixed(2)}` : 'Settled (₹0.00)'}
+        </span>
+      </div>
+      <div class="repayment-calc-row">
+        <span>Repayment to Apply</span>
+        <span class="repayment-calc-val positive">-₹${amount.toFixed(2)}</span>
+      </div>
+      <div class="repayment-calc-row total-row">
+        <span>Balance After Settle</span>
+        <span class="repayment-calc-val ${newDebt <= 0 ? 'positive' : 'negative'}">
+          ${newDebt <= 0 ? (newDebt < 0 ? `Overpaid by ₹${Math.abs(newDebt).toFixed(2)}` : 'Fully Settled (₹0.00)') : `Still Owes ₹${newDebt.toFixed(2)}`}
+        </span>
+      </div>
+    `;
+  }
+
+  handleConfirmRepaymentSubmit(e) {
+    e.preventDefault();
+    const personId = this.dom.repaymentPersonSelect ? this.dom.repaymentPersonSelect.value : null;
+    const amount = parseFloat(this.dom.repaymentAmountInput ? this.dom.repaymentAmountInput.value : 0) || 0;
+    const notes = (this.dom.repaymentNotesInput ? this.dom.repaymentNotesInput.value.trim() : '') || 'Repayment';
+
+    if (!personId) {
+      alert('Please choose which contact sent this repayment.');
+      return;
+    }
+    if (amount <= 0) {
+      alert('Please enter a valid settlement amount.');
+      return;
+    }
+
+    const person = this.ledger.people.find(p => p.id === personId);
+    const settlement = {
+      id: 's_' + Date.now(),
+      fromPersonId: personId,
+      toPersonId: 'me',
+      amount,
+      date: new Date().toISOString(),
+      paymentSource: 'Paytm / UPI Repayment',
+      notes
+    };
+
+    this.ledger.settlements.push(settlement);
+    this.saveLedger();
+
+    if (this.detectedRepaymentData) {
+      this.dismissRepaymentData();
+    }
+
+    this.closeConfirmRepaymentModal();
+    this.render();
+  }
+
+  dismissRepaymentData() {
+    if (this.detectedRepaymentData) {
+      const sig = this.getRepaymentSignature(this.detectedRepaymentData);
+      this.markRepaymentDismissed(sig);
+      if (window.AndroidBridge && window.AndroidBridge.dismissRepayment) {
+        window.AndroidBridge.dismissRepayment(sig);
+      }
+      this.detectedRepaymentData = null;
+    }
+    if (this.dom.repaymentNotificationBanner) {
+      this.dom.repaymentNotificationBanner.classList.add('hidden');
+    }
+    if (window.AndroidBridge && window.AndroidBridge.clearPendingRepayment) {
+      window.AndroidBridge.clearPendingRepayment();
+    }
+  }
+
+  closeConfirmRepaymentModal() {
+    if (this.dom.confirmRepaymentModal) {
+      this.dom.confirmRepaymentModal.classList.add('hidden');
+    }
+  }
+
+  getRepaymentSignature(data) {
+    if (!data) return '';
+    const amt = parseFloat(data.amount) || 0;
+    const sender = data.sender || '';
+    const note = data.rawText || data.note || '';
+    return `repay_${amt.toFixed(2)}_${sender}_${note.length}`;
+  }
+
+  isRepaymentDismissed(data) {
+    const sig = this.getRepaymentSignature(data);
+    if (!sig) return false;
+    try {
+      const dismissed = JSON.parse(localStorage.getItem('whosetab_dismissed_repayments') || '[]');
+      return dismissed.includes(sig);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  markRepaymentDismissed(sig) {
+    if (!sig) return;
+    try {
+      let dismissed = JSON.parse(localStorage.getItem('whosetab_dismissed_repayments') || '[]');
+      if (!dismissed.includes(sig)) {
+        dismissed.push(sig);
+        if (dismissed.length > 50) dismissed = dismissed.slice(-40);
+        localStorage.setItem('whosetab_dismissed_repayments', JSON.stringify(dismissed));
+      }
+    } catch (e) {}
   }
 
   // ================= AUTO-UPDATE (GITHUB PUBLIC RELEASES) =================
@@ -1660,6 +2104,11 @@ class WhoseTabApp {
     filtered.forEach(p => {
       const bal = balances[p.id] || 0;
       const initial = p.name.charAt(0).toUpperCase();
+      const metaDetails = [
+        p.relationship,
+        p.phone ? p.phone : null,
+        p.upi ? p.upi : null
+      ].filter(Boolean).join(' • ');
 
       const card = document.createElement('div');
       card.className = 'card person-row';
@@ -1668,7 +2117,7 @@ class WhoseTabApp {
           <div class="avatar-badge">${initial}</div>
           <div class="person-info">
             <span class="person-name">${p.name}</span>
-            <span class="person-relation">${p.relationship} ${p.upi ? `• ${p.upi}` : ''}</span>
+            <span class="person-relation">${metaDetails}</span>
           </div>
         </div>
         <div class="person-right">
@@ -1678,9 +2127,14 @@ class WhoseTabApp {
             </span>
             <span class="balance-label">${bal > 0 ? 'Owes you' : 'Settled'}</span>
           </div>
+          <button type="button" class="btn btn-sm btn-secondary edit-person-btn" data-id="${p.id}" title="Edit contact">Edit</button>
           <button type="button" class="btn btn-sm btn-secondary snap-for-person-btn" data-id="${p.id}">Split</button>
         </div>
       `;
+
+      card.querySelector('.edit-person-btn').addEventListener('click', () => {
+        this.openEditPersonModal(p.id);
+      });
 
       card.querySelector('.snap-for-person-btn').addEventListener('click', () => {
         this.selectedPersonIds = new Set([p.id]);

@@ -102,6 +102,23 @@ public class WebAppInterface {
         PaymentDataStore.clearPendingPayment(activity);
     }
 
+    // --- PENDING REPAYMENT BRIDGE (INCOMING SETTLEMENTS) ---
+    @JavascriptInterface
+    public String getPendingRepayment() {
+        JSONObject obj = PaymentDataStore.getPendingRepayment(activity);
+        return obj != null ? obj.toString() : "";
+    }
+
+    @JavascriptInterface
+    public void clearPendingRepayment() {
+        PaymentDataStore.clearPendingRepayment(activity);
+    }
+
+    @JavascriptInterface
+    public void dismissRepayment(String signature) {
+        PaymentDataStore.markRepaymentDismissed(activity, signature);
+    }
+
     // --- PACKAGE INSTALL PERMISSION ---
     @JavascriptInterface
     public boolean canRequestPackageInstalls() {

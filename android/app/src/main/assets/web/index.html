@@ -39,6 +39,20 @@
       </div>
     </section>
 
+    <!-- Detected Repayment Floating Alert -->
+    <section id="repaymentNotificationBanner" class="paytm-banner hidden" role="alert">
+      <div class="banner-top" id="repaymentBannerBody">
+        <div class="banner-info">
+          <div class="banner-title" style="color: #10b981;">Repayment Received</div>
+          <div class="banner-detail" id="repaymentBannerDetail">₹0.00 from Sender</div>
+        </div>
+      </div>
+      <div class="banner-buttons">
+        <button type="button" id="repaymentConfirmActionBtn" class="btn btn-paytm-action" style="background: #10b981;">Confirm Settlement</button>
+        <button type="button" id="repaymentDismissBannerBtn" class="btn btn-paytm-dismiss">Dismiss</button>
+      </div>
+    </section>
+
     <!-- Main Views -->
     <main class="content-area">
       
@@ -164,7 +178,7 @@
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">WhoseTab Version</span>
-              <span class="setting-desc" id="appVersionDisplay">v1.0.8</span>
+              <span class="setting-desc" id="appVersionDisplay">v1.0.9</span>
             </div>
             <button type="button" id="checkForUpdatesBtn" class="btn btn-sm btn-primary">Check for updates</button>
           </div>
@@ -372,6 +386,10 @@
             <input type="text" id="personName" class="form-input" placeholder="e.g. Aman, Priya, Rohit" required>
           </div>
           <div class="form-group">
+            <label for="personPhone" class="form-label">Phone Number (Optional)</label>
+            <input type="tel" id="personPhone" class="form-input" placeholder="e.g. 9876543210" pattern="[0-9+ -]*">
+          </div>
+          <div class="form-group">
             <label class="form-label">Relationship</label>
             <div class="split-toggle-group">
               <label class="split-btn active"><input type="radio" name="relationship" value="Roommate" checked><span>Roommate</span></label>
@@ -385,6 +403,44 @@
           </div>
           <div class="modal-footer">
             <button type="submit" class="btn btn-primary btn-block btn-lg">Add Contact</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: EDIT CONTACT -->
+    <div id="editPersonModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-sheet">
+        <div class="sheet-handle"></div>
+        <div class="modal-header">
+          <h3>Edit Contact</h3>
+          <button type="button" id="closeEditPersonModalBtn" class="btn-close">✕</button>
+        </div>
+        <form id="editPersonForm">
+          <input type="hidden" id="editPersonId">
+          <div class="form-group">
+            <label for="editPersonName" class="form-label">Name</label>
+            <input type="text" id="editPersonName" class="form-input" required>
+          </div>
+          <div class="form-group">
+            <label for="editPersonPhone" class="form-label">Phone Number (Optional)</label>
+            <input type="tel" id="editPersonPhone" class="form-input" placeholder="e.g. 9876543210" pattern="[0-9+ -]*">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Relationship</label>
+            <div class="split-toggle-group">
+              <label class="split-btn" id="editRelRoommate"><input type="radio" name="editRelationship" value="Roommate"><span>Roommate</span></label>
+              <label class="split-btn" id="editRelClassmate"><input type="radio" name="editRelationship" value="Classmate"><span>Classmate</span></label>
+              <label class="split-btn" id="editRelFriend"><input type="radio" name="editRelationship" value="Friend"><span>Friend</span></label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="editPersonUpi" class="form-label">Paytm / UPI ID (Optional)</label>
+            <input type="text" id="editPersonUpi" class="form-input" placeholder="name@paytm">
+          </div>
+          <div class="modal-footer flex gap-2">
+            <button type="button" class="btn btn-secondary flex-1" id="deletePersonBtn">Delete</button>
+            <button type="submit" class="btn btn-primary flex-1">Save Changes</button>
           </div>
         </form>
       </div>
@@ -415,6 +471,46 @@
       </div>
     </div>
 
+    <!-- MODAL: CONFIRM REPAYMENT (DETECTED FROM PAYTM/SMS) -->
+    <div id="confirmRepaymentModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-sheet">
+        <div class="sheet-handle"></div>
+        <div class="modal-header">
+          <h3>Confirm Repayment</h3>
+          <button type="button" id="closeConfirmRepaymentModalBtn" class="btn-close">✕</button>
+        </div>
+        <form id="confirmRepaymentForm">
+          <div class="repayment-banner card p-3 mb-3">
+            <div class="text-xs text-muted">Detected Received Payment</div>
+            <div class="repayment-amount-display" id="repaymentAmountDisplay">₹0.00</div>
+            <div class="text-xs text-muted mt-1" id="repaymentSourceDetail">From Bhuvnesh via Paytm</div>
+          </div>
+
+          <div class="form-group">
+            <label for="repaymentPersonSelect" class="form-label">Who sent this repayment?</label>
+            <select id="repaymentPersonSelect" class="form-input" required></select>
+          </div>
+
+          <div class="repayment-balance-preview card p-3 mb-3" id="repaymentBalancePreview"></div>
+
+          <div class="form-group">
+            <label for="repaymentAmountInput" class="form-label">Amount to settle (₹)</label>
+            <input type="number" id="repaymentAmountInput" class="form-input input-lg" step="any" required inputmode="decimal">
+          </div>
+
+          <div class="form-group">
+            <label for="repaymentNotesInput" class="form-label">Notes (Optional)</label>
+            <input type="text" id="repaymentNotesInput" class="form-input" placeholder="e.g. Repayment via Paytm">
+          </div>
+
+          <div class="modal-footer flex flex-col gap-2">
+            <button type="submit" class="btn btn-primary btn-block btn-lg" id="confirmRepaymentBtn">Confirm & Settle Balance</button>
+            <button type="button" class="btn btn-secondary btn-block" id="dismissRepaymentBtn">Dismiss (Not a Tab Repayment)</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- MODAL: UPDATE AVAILABLE -->
     <div id="updateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
@@ -424,7 +520,7 @@
           <button type="button" id="closeUpdateModalBtn" class="btn-close">✕</button>
         </div>
         <div class="p-2">
-          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.0.8</div>
+          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.0.9</div>
           <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Bug fixes and improvements</div>
 
           <!-- In-App Download Progress Indicator -->
