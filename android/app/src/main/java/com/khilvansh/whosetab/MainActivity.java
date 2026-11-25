@@ -1,7 +1,9 @@
 package com.khilvansh.whosetab;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -14,31 +16,59 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class MainActivity extends AppCompatActivity {
 
+    public static volatile boolean isActivityForeground = false;
+    private static volatile MainActivity activeInstance = null;
+
     private WebView webView;
     private WebAppInterface webAppInterface;
+
+    public static void dispatchFromServiceIfVisible(JSONObject payload, boolean isRepayment) {
+        MainActivity inst = activeInstance;
+        if (inst != null && isActivityForeground) {
+            inst.runOnUiThread(() -> {
+                if (isRepayment) {
+                    PaymentDataStore.consumePendingRepayment(inst);
+                    inst.dispatchRepaymentToWeb(payload);
+                } else {
+                    PaymentDataStore.consumePendingPayment(inst);
+                    inst.dispatchPaymentToWeb(payload);
+                }
+            });
+        }
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Immersive Dark Theme Navigation & Status Bar
-        Window window = getWindow();
-        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(Color.parseColor("#0B0F19"));
-        window.setNavigationBarColor(Color.parseColor("#0B0F19"));
+        updateSystemBarsTheme(true);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        // Keep Screen Awake by default when working on mobile
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // Request POST_NOTIFICATIONS runtime permission on Android 13+ so background status bar icon is always visible
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                getSharedPreferences(PaytmNotificationListenerService.PREFS_NAME, MODE_PRIVATE)
+                    .edit().putBoolean("asked_post_notifications", true).apply();
+                ActivityCompat.requestPermissions(this, new String[] { Manifest.permission.POST_NOTIFICATIONS }, 201);
+            }
+        }
+
+        // Start persistent foreground service immediately
+        ScannerForegroundService.ensureRunning(this);
 
         webView = new WebView(this);
         webView.setKeepScreenOn(true);
+        webView.setBackgroundColor(Color.parseColor("#09090B"));
         setContentView(webView);
 
         WebSettings settings = webView.getSettings();
@@ -64,31 +94,99 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                drainNativeQuickExpenses();
                 handleIntentData(getIntent());
             }
         });
 
-        // Load offline application from assets
         webView.loadUrl("file:///android_asset/web/index.html");
-
-        // Check for updates in background if enabled
         UpdateManager.checkSilentlyOnLaunch(this);
+    }
+
+    public void updateSystemBarsTheme(boolean isDark) {
+        runOnUiThread(() -> {
+            Window window = getWindow();
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            int bgColor = isDark ? Color.parseColor("#09090B") : Color.parseColor("#F8FAFC");
+            window.setStatusBarColor(bgColor);
+            window.setNavigationBarColor(bgColor);
+            if (webView != null) {
+                webView.setBackgroundColor(bgColor);
+            }
+            WindowInsetsControllerCompat controller = new WindowInsetsControllerCompat(window, window.getDecorView());
+            controller.setAppearanceLightStatusBars(!isDark);
+            controller.setAppearanceLightNavigationBars(!isDark);
+        });
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        drainNativeQuickExpenses();
         handleIntentData(intent);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // Live refresh scanner status & initial setup state in web UI
+        isActivityForeground = true;
+        activeInstance = this;
+        ScannerForegroundService.ensureRunning(this);
+
         if (webView != null) {
             webView.post(() -> {
-                webView.evaluateJavascript("if(window.app){ if(window.app.checkScannerStatus) window.app.checkScannerStatus(); if(window.app.checkInitialSetup) window.app.checkInitialSetup(); }", null);
+                drainNativeQuickExpenses();
+                webView.evaluateJavascript(
+                    "if(window.app){ " +
+                    "  if(window.app.checkScannerStatus) window.app.checkScannerStatus(); " +
+                    "  if(window.app.checkInitialSetup) window.app.checkInitialSetup(); " +
+                    "  if(window.app.checkPendingPayment) window.app.checkPendingPayment(); " +
+                    "}",
+                    null
+                );
+            });
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 201) {
+            ScannerForegroundService.ensureRunning(this);
+            if (webView != null) {
+                webView.post(() -> webView.evaluateJavascript(
+                    "if(window.app){ window.app.checkScannerStatus(); window.app.checkInitialSetup(); }", null
+                ));
+            }
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        isActivityForeground = false;
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (activeInstance == this) {
+            activeInstance = null;
+        }
+        super.onDestroy();
+    }
+
+    private void drainNativeQuickExpenses() {
+        if (webView == null) return;
+        JSONArray queued = PaymentDataStore.consumeQueuedQuickExpenses(this);
+        if (queued != null && queued.length() > 0) {
+            final String arrStr = queued.toString();
+            webView.post(() -> {
+                String js = String.format(
+                    "if(window.app && typeof window.app.applyNativeQuickExpenses === 'function'){ window.app.applyNativeQuickExpenses(%s); }",
+                    arrStr
+                );
+                webView.evaluateJavascript(js, null);
             });
         }
     }
@@ -96,15 +194,27 @@ public class MainActivity extends AppCompatActivity {
     private void handleIntentData(Intent intent) {
         if (webView == null) return;
 
-        // 0. From Repayment extras (PaytmNotificationListenerService)
+        // Notification action: Open Quick Expense
+        if (intent != null && intent.getBooleanExtra("open_quick_expense", false)) {
+            intent.removeExtra("open_quick_expense");
+            webView.post(() -> webView.evaluateJavascript(
+                "if(window.app && typeof window.app.openSnapModal === 'function'){ window.app.openSnapModal(); }",
+                null
+            ));
+            return;
+        }
+
+        // 0. Repayment extras
         if (intent != null && intent.hasExtra("paytm_type") && "repayment".equals(intent.getStringExtra("paytm_type"))) {
             double rAmount = intent.getDoubleExtra("paytm_amount", 0.0);
             String rSender = intent.getStringExtra("paytm_sender");
             String rNote = intent.getStringExtra("paytm_note");
+            long rPostTime = intent.getLongExtra("paytm_postTime", 0L);
             intent.removeExtra("paytm_type");
             intent.removeExtra("paytm_amount");
             intent.removeExtra("paytm_sender");
             intent.removeExtra("paytm_note");
+            intent.removeExtra("paytm_postTime");
 
             if (rAmount > 0) {
                 try {
@@ -113,6 +223,7 @@ public class MainActivity extends AppCompatActivity {
                     rObj.put("amount", rAmount);
                     rObj.put("sender", rSender != null ? rSender : "Someone");
                     rObj.put("note", rNote != null ? rNote : "");
+                    rObj.put("postTime", rPostTime);
                     rObj.put("timestamp", System.currentTimeMillis());
 
                     String sig = PaymentDataStore.getRepaymentSignature(rObj);
@@ -134,22 +245,25 @@ public class MainActivity extends AppCompatActivity {
         String note = "";
         String category = "General";
         String txnId = "";
+        long postTime = 0L;
 
-        // 1. From PaytmNotificationListenerService extras
+        // 1. Outgoing Payment extras
         if (intent != null && intent.hasExtra("paytm_amount")) {
             amount = intent.getDoubleExtra("paytm_amount", 0.0);
             recipient = intent.getStringExtra("paytm_recipient");
             note = intent.getStringExtra("paytm_note");
             category = intent.getStringExtra("paytm_category");
             txnId = intent.getStringExtra("paytm_txnId");
-            // Clear processed intent extras to avoid duplicate handling
+            postTime = intent.getLongExtra("paytm_postTime", 0L);
+
             intent.removeExtra("paytm_amount");
             intent.removeExtra("paytm_recipient");
             intent.removeExtra("paytm_note");
             intent.removeExtra("paytm_category");
             intent.removeExtra("paytm_txnId");
+            intent.removeExtra("paytm_postTime");
         }
-        // 2. From Deep Link URI (whosetab://snap?amount=350&to=Sharma)
+        // 2. Deep Link URI
         else if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
             Uri data = intent.getData();
             String amtStr = data.getQueryParameter("amount");
@@ -161,11 +275,11 @@ public class MainActivity extends AppCompatActivity {
             intent.setData(null);
             intent.setAction(null);
         }
-        // 3. From System Share Intent (ACTION_SEND)
+        // 3. System Share Intent
         else if (intent != null && Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())) {
             String sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
             if (sharedText != null) {
-                JSONObject parsed = PaytmNotificationListenerService.parseRawText(sharedText);
+                JSONObject parsed = PaytmNotificationListenerService.parseRawText("", sharedText, sharedText);
                 if (parsed != null) {
                     amount = parsed.optDouble("amount", 0.0);
                     recipient = parsed.optString("recipient", "Merchant");
@@ -182,26 +296,24 @@ public class MainActivity extends AppCompatActivity {
             try {
                 JSONObject paymentObj = new JSONObject();
                 paymentObj.put("amount", amount);
-                paymentObj.put("recipient", recipient != null && !recipient.isEmpty() ? recipient : "Paytm Purchase");
+                paymentObj.put("recipient", recipient != null && !recipient.isEmpty() ? recipient : "Merchant");
                 paymentObj.put("note", note != null ? note : "");
-                paymentObj.put("suggestedCategory", category != null ? category : "Groceries");
+                paymentObj.put("suggestedCategory", category != null ? category : "General");
                 paymentObj.put("txnId", txnId != null ? txnId : "");
+                paymentObj.put("postTime", postTime);
                 paymentObj.put("timestamp", System.currentTimeMillis());
 
                 String sig = PaymentDataStore.getSignature(paymentObj);
                 if (PaymentDataStore.isPaymentDismissed(this, sig)) {
-                    android.util.Log.d("WhoseTab", "Payment " + sig + " already dismissed by user, skipping dispatch");
                     return;
                 }
 
-                // Consume so it does not persist across future app relaunches
                 PaymentDataStore.consumePendingPayment(this);
                 dispatchPaymentToWeb(paymentObj);
             } catch (Exception e) {
                 android.util.Log.e("WhoseTab", "Error building payment json", e);
             }
         } else {
-            // 1. Check if store has a fresh pending repayment
             JSONObject pendingRepay = PaymentDataStore.consumePendingRepayment(this);
             if (pendingRepay != null && pendingRepay.optDouble("amount", 0.0) > 0.0) {
                 String sig = PaymentDataStore.getRepaymentSignature(pendingRepay);
@@ -211,7 +323,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // 2. Check if store has a fresh pending payment (consume it immediately so it only dispatches once)
             JSONObject pending = PaymentDataStore.consumePendingPayment(this);
             if (pending != null && pending.optDouble("amount", 0.0) > 0.0) {
                 String sig = PaymentDataStore.getSignature(pending);
@@ -269,18 +380,6 @@ public class MainActivity extends AppCompatActivity {
                 jsonStr
             );
             webView.evaluateJavascript(js, null);
-        });
-    }
-
-    public void setKeepScreenOnEnabled(boolean enabled) {
-        runOnUiThread(() -> {
-            if (enabled) {
-                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                if (webView != null) webView.setKeepScreenOn(true);
-            } else {
-                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                if (webView != null) webView.setKeepScreenOn(false);
-            }
         });
     }
 

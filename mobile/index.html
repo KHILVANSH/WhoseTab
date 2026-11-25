@@ -3,527 +3,674 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#070a12">
-  <meta name="description" content="WhoseTab — Fast offline peer expense tracker and Paytm logger.">
+  <meta name="theme-color" content="#09090B">
+  <meta name="description" content="WhoseTab — Offline expense ledger and payment tracker.">
   <title>WhoseTab</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="mobile-viewport">
-    
-    <!-- Top Status Bar & App Header -->
+  <div class="app-shell">
+
+    <!-- Top Application Bar -->
     <header class="app-header">
-      <div class="header-left">
-        <!-- Menacing Bold Typographic Logo -->
-        <h1 class="brand-logo">WHOSETAB</h1>
-        <!-- Live Payment Scanner Status Indicator -->
-        <div id="scannerStatusBadge" class="scanner-badge active" title="Background payment scanner status">
-          <span class="radar-dot"></span>
-          <span id="scannerStatusText" class="scanner-text">Scanner active</span>
+      <div class="brand-group">
+        <svg class="brand-mark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 3h14a2 2 0 0 1 2 2v16l-3-2-3 2-3-2-3 2-3-2-3 2V5a2 2 0 0 1 2-2z"></path>
+          <line x1="8" y1="8" x2="16" y2="8"></line>
+          <line x1="8" y1="12" x2="16" y2="12"></line>
+          <line x1="8" y1="16" x2="12" y2="16"></line>
+        </svg>
+        <span class="brand-name">WhoseTab</span>
+      </div>
+
+      <div class="header-actions">
+        <button type="button" id="scannerStatusBadge" class="status-pill active" aria-label="Background payment listener status">
+          <span class="status-dot"></span>
+          <span id="scannerStatusText">Listening</span>
+        </button>
+
+        <button type="button" id="openSnapModalBtn" class="icon-action-btn" aria-label="Add Expense" title="Add Expense">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+
+        <div class="menu-anchor">
+          <button type="button" id="headerMoreBtn" class="icon-action-btn" aria-label="More options" aria-expanded="false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="5" r="1"></circle>
+              <circle cx="12" cy="12" r="1"></circle>
+              <circle cx="12" cy="19" r="1"></circle>
+            </svg>
+          </button>
+
+          <div id="headerOverflowMenu" class="popover-menu hidden" role="menu">
+            <button type="button" class="menu-item" id="menuAddContact" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+              <span>Add Contact</span>
+            </button>
+            <button type="button" class="menu-item" id="menuPermissions" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              <span>Permissions</span>
+            </button>
+            <button type="button" class="menu-item" id="menuTestOverlay" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><rect x="11" y="13" width="8" height="6" rx="1"></rect></svg>
+              <span>Preview Quick-Add Popup</span>
+            </button>
+            <div class="menu-divider"></div>
+            <button type="button" class="menu-item" id="menuExportData" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <span>Export Backup</span>
+            </button>
+            <button type="button" class="menu-item" id="menuImportData" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <span>Import Backup</span>
+            </button>
+            <button type="button" class="menu-item" id="menuCheckUpdates" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              <span>Check for Updates</span>
+            </button>
+          </div>
         </div>
       </div>
     </header>
 
-    <!-- Detected Paytm Floating Alert -->
-    <section id="paytmNotificationBanner" class="paytm-banner hidden" role="alert">
-      <div class="banner-top" id="paytmBannerBody">
-        <div class="banner-info">
-          <div class="banner-title">Payment Detected</div>
-          <div class="banner-detail" id="paytmBannerDetail">₹0.00 to Merchant</div>
-        </div>
-      </div>
-      <div class="banner-buttons">
-        <button type="button" id="paytmSnapBtn" class="btn btn-paytm-action">Split Expense</button>
-        <button type="button" id="paytmDismissBtn" class="btn btn-paytm-dismiss">Dismiss</button>
-      </div>
-    </section>
-
-    <!-- Detected Repayment Floating Alert -->
-    <section id="repaymentNotificationBanner" class="paytm-banner hidden" role="alert">
-      <div class="banner-top" id="repaymentBannerBody">
-        <div class="banner-info">
-          <div class="banner-title" style="color: #10b981;">Repayment Received</div>
-          <div class="banner-detail" id="repaymentBannerDetail">₹0.00 from Sender</div>
-        </div>
-      </div>
-      <div class="banner-buttons">
-        <button type="button" id="repaymentConfirmActionBtn" class="btn btn-paytm-action" style="background: #10b981;">Confirm Settlement</button>
-        <button type="button" id="repaymentDismissBannerBtn" class="btn btn-paytm-dismiss">Dismiss</button>
-      </div>
-    </section>
-
-    <!-- Main Views -->
+    <!-- Main Scroll Content -->
     <main class="content-area">
-      
-      <!-- TAB 1: DASHBOARD / LEDGER -->
+
+      <!-- VIEW 1: LEDGER OVERVIEW -->
       <section id="viewDashboard" class="tab-view active">
-        <!-- Balance Cards adhering to 8dp grid -->
-        <div class="summary-cards-grid">
-          <div class="card card-summary card-green">
-            <span class="summary-label">You Are Owed</span>
-            <div class="summary-value" id="totalOwedToMe">₹0.00</div>
-            <span class="summary-subtext" id="activeDebtorsCount">0 people owe you</span>
+        <!-- Net Balance Hero Card -->
+        <div class="balance-hero-card">
+          <div class="hero-top">
+            <div>
+              <span class="hero-eyebrow">Net Owed to You</span>
+              <div class="hero-amount tabular" id="totalOwedToMe">₹0.00</div>
+            </div>
+            <button type="button" id="heroAddBtn" class="btn-pill-primary">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span>Expense</span>
+            </button>
           </div>
-          <div class="card card-summary card-muted">
-            <span class="summary-label">You Owe</span>
-            <div class="summary-value" id="totalIOwe">₹0.00</div>
-            <span class="summary-subtext">All clear</span>
+          <div class="hero-footer">
+            <span class="hero-meta" id="activeDebtorsCount">0 active balances</span>
+            <span class="hero-meta-dot" aria-hidden="true">•</span>
+            <span class="hero-meta" id="heroExpenseCount">0 entries</span>
           </div>
         </div>
 
-        <!-- Section: People Net Balances -->
-        <div class="section-header">
-          <h2>Friends & Roommates</h2>
-          <button type="button" id="quickAddPersonBtn" class="btn-text">+ Add Person</button>
+        <!-- Section: Active Balances -->
+        <div class="section-bar">
+          <h2 class="section-title">Balances</h2>
+          <div class="section-bar-actions">
+            <div class="segmented-mini" role="tablist">
+              <button type="button" class="seg-mini-btn active" id="dashboardBalActiveBtn" data-mode="active">Unsettled</button>
+              <button type="button" class="seg-mini-btn" id="dashboardBalAllBtn" data-mode="all">All</button>
+            </div>
+          </div>
         </div>
 
-        <div id="peopleList" class="people-list">
-          <!-- Populated dynamically via JS -->
+        <div id="peopleList" class="grouped-list">
+          <!-- Populated via JS -->
         </div>
 
-        <!-- Section: Recent Purchases -->
-        <div class="section-header mt-4">
-          <h2>Recent Purchases</h2>
-          <span class="count-badge" id="expenseCountBadge">0</span>
+        <!-- Section: Recent Activity (Expenses & Repayments) -->
+        <div class="section-bar mt-6">
+          <div class="section-title-group">
+            <h2 class="section-title">Activity</h2>
+            <span class="count-pill tabular" id="expenseCountBadge">0</span>
+          </div>
+          <div class="segmented-mini" role="tablist">
+            <button type="button" class="seg-mini-btn active" data-act-filter="all">All</button>
+            <button type="button" class="seg-mini-btn" data-act-filter="expense">Spent</button>
+            <button type="button" class="seg-mini-btn" data-act-filter="repayment">Repaid</button>
+          </div>
         </div>
 
-        <div id="recentExpensesList" class="expense-list">
-          <!-- Populated dynamically via JS -->
+        <div id="recentExpensesList" class="grouped-list">
+          <!-- Populated via JS -->
         </div>
       </section>
 
-      <!-- TAB 2: PEOPLE & CONTACTS -->
+      <!-- VIEW 2: CONTACTS -->
       <section id="viewPeople" class="tab-view">
-        <div class="section-header">
-          <h2>Contacts & Balances</h2>
-          <button type="button" id="addPersonPageBtn" class="btn btn-sm btn-primary">+ Add New</button>
+        <div class="section-bar">
+          <h2 class="section-title">People</h2>
+          <button type="button" id="addPersonPageBtn" class="btn-pill-subtle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>New Contact</span>
+          </button>
         </div>
-        <div class="filter-chips">
+
+        <div class="search-field-wrap mt-2">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="search" id="peopleSearchInput" class="search-input" placeholder="Search by name, phone, or UPI">
+        </div>
+
+        <div class="filter-strip mt-3">
           <button type="button" class="chip active" data-filter="all">All</button>
+          <button type="button" class="chip" data-filter="unsettled">Unsettled</button>
           <button type="button" class="chip" data-filter="Roommate">Roommates</button>
           <button type="button" class="chip" data-filter="Classmate">Classmates</button>
           <button type="button" class="chip" data-filter="Friend">Friends</button>
         </div>
-        <div id="contactsFullList" class="contacts-grid mt-3">
-          <!-- Populated dynamically -->
+
+        <div id="contactsFullList" class="grouped-list mt-3">
+          <!-- Populated via JS -->
         </div>
       </section>
 
-      <!-- TAB 3: SETTINGS -->
+      <!-- VIEW 3: SETTINGS -->
       <section id="viewSettings" class="tab-view">
-        <h2>App Settings</h2>
-        
-        <div class="card settings-card mt-3">
-          <!-- Theme Setting: Only Dark and Light Mode -->
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Appearance Theme</span>
-              <span class="setting-desc">Select dark or light application theme</span>
+        <h2 class="page-heading">Settings</h2>
+
+        <div class="settings-section-label">Payment Detection</div>
+        <div class="grouped-list settings-group">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="row-title">When payment occurs</span>
+              <span class="row-subtitle">Behavior after paying via Paytm or UPI</span>
             </div>
-            <select id="themeSelector" class="form-select">
-              <option value="dark" selected>Dark Theme (Default)</option>
-              <option value="light">Light Theme</option>
+            <select id="detectionModeSelector" class="inline-select">
+              <option value="overlay">Quick-Add Popup</option>
+              <option value="open_app">Open Full App</option>
+              <option value="notification">Notification Only</option>
             </select>
           </div>
 
-          <!-- Paytm Open Delay Setting -->
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Paytm Open Delay</span>
-              <span class="setting-desc">Wait time before bringing WhoseTab to foreground</span>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="row-title">Popup delay</span>
+              <span class="row-subtitle">Wait before displaying prompt</span>
             </div>
-            <select id="paytmDelaySelector" class="form-select">
-              <option value="0" selected>Instant (0s)</option>
-              <option value="1000">1 second</option>
-              <option value="2000">2 seconds</option>
-              <option value="3000">3 seconds</option>
-              <option value="5000">5 seconds</option>
+            <select id="paytmDelaySelector" class="inline-select">
+              <option value="0" selected>Instant</option>
+              <option value="1000">1s</option>
+              <option value="2000">2s</option>
+              <option value="3000">3s</option>
+              <option value="5000">5s</option>
             </select>
           </div>
 
-          <!-- Currency Display -->
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Currency</span>
-              <span class="setting-desc">Base currency for calculations</span>
+          <button type="button" id="testOverlaySettingsBtn" class="settings-row interactive-row">
+            <div class="settings-row-info">
+              <span class="row-title">Preview bottom-right popup</span>
+              <span class="row-subtitle">Test quick-add toast overlay</span>
             </div>
-            <span class="badge-pill">₹ (INR)</span>
+            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>
+
+        <div class="settings-section-label">Background Service</div>
+        <div class="grouped-list settings-group">
+          <div class="settings-row" id="settingsItemNotif">
+            <div class="settings-row-info">
+              <span class="row-title">Notification Access</span>
+              <span class="row-subtitle">Read Paytm &amp; bank SMS alerts</span>
+            </div>
+            <button type="button" id="grantNotificationAccessBtn" class="btn-status-action">Enable</button>
+          </div>
+
+          <div class="settings-row" id="settingsItemPostNotif">
+            <div class="settings-row-info">
+              <span class="row-title">Status Bar Icon &amp; Alerts</span>
+              <span class="row-subtitle">Shows persistent background indicator</span>
+            </div>
+            <button type="button" id="grantPostNotifBtn" class="btn-status-action">Allow</button>
+          </div>
+
+          <div class="settings-row" id="settingsItemOverlay">
+            <div class="settings-row-info">
+              <span class="row-title">Display Over Apps</span>
+              <span class="row-subtitle">Show quick-add popup over Paytm</span>
+            </div>
+            <button type="button" id="grantOverlayAccessBtn" class="btn-status-action">Enable</button>
+          </div>
+
+          <div class="settings-row" id="settingsItemBattery">
+            <div class="settings-row-info">
+              <span class="row-title">Unrestricted Battery</span>
+              <span class="row-subtitle">Keep listener active in background</span>
+            </div>
+            <button type="button" id="grantBatteryAccessBtn" class="btn-status-action">Allow</button>
           </div>
         </div>
 
-        <!-- Android Permissions for Payment Interception -->
-        <h3 class="mt-4">Background Scanner Permissions</h3>
-        <div class="card settings-card mt-2">
-          <div class="setting-item" id="settingsItemNotif">
-            <div class="setting-text">
-              <span class="setting-title">1. Notification Access</span>
-              <span class="setting-desc">Detect payment notifications</span>
+        <div class="settings-section-label">Appearance</div>
+        <div class="grouped-list settings-group">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="row-title">Theme</span>
+              <span class="row-subtitle">Interface color scheme</span>
             </div>
-            <button type="button" id="grantNotificationAccessBtn" class="btn btn-sm btn-primary">Enable</button>
+            <div class="segmented-mini">
+              <button type="button" class="seg-mini-btn" id="themeDarkBtn">Dark</button>
+              <button type="button" class="seg-mini-btn" id="themeLightBtn">Light</button>
+            </div>
           </div>
 
-          <div class="setting-item mt-2" id="settingsItemOverlay">
-            <div class="setting-text">
-              <span class="setting-title">2. Draw Over Other Apps</span>
-              <span class="setting-desc">Open app automatically over payments</span>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="row-title">Currency</span>
             </div>
-            <button type="button" id="grantOverlayAccessBtn" class="btn btn-sm btn-primary">Enable</button>
+            <span class="value-muted">INR (₹)</span>
           </div>
         </div>
 
-        <!-- Clean Updates Section -->
-        <h3 class="mt-4">Updates</h3>
-        <div class="card settings-card mt-2">
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">WhoseTab Version</span>
-              <span class="setting-desc" id="appVersionDisplay">v1.0.9</span>
+        <div class="settings-section-label">Application &amp; Backup</div>
+        <div class="grouped-list settings-group">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="row-title">Version <span id="appVersionDisplay" class="text-muted">v1.1.0</span></span>
+              <span class="row-subtitle" id="updateStatusNotice">Stored locally on device</span>
             </div>
-            <button type="button" id="checkForUpdatesBtn" class="btn btn-sm btn-primary">Check for updates</button>
+            <button type="button" id="checkForUpdatesBtn" class="btn-status-action">Check</button>
           </div>
-          <div id="updateStatusNotice" class="text-xs text-muted mt-1"></div>
-        </div>
 
-        <!-- Data & Backup -->
-        <h3 class="mt-4">Offline Data</h3>
-        <div class="card settings-card mt-2">
-          <p class="text-secondary text-sm">
-            All data is saved strictly on your device. Export or restore your ledger anytime.
-          </p>
-          <div class="action-buttons-row mt-3">
-            <button type="button" id="exportDataBtn" class="btn btn-secondary">Export JSON Backup</button>
-            <button type="button" id="importDataBtn" class="btn btn-secondary">Import JSON</button>
-            <input type="file" id="importFileInput" accept=".json" style="display: none;">
-          </div>
-          <button type="button" id="clearDataBtn" class="btn btn-danger-ghost mt-2">Reset All Data</button>
+          <button type="button" id="exportDataBtn" class="settings-row interactive-row">
+            <span class="row-title">Export JSON Backup</span>
+            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+
+          <button type="button" id="importDataBtn" class="settings-row interactive-row">
+            <span class="row-title">Import JSON Backup</span>
+            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+          <input type="file" id="importFileInput" accept=".json" style="display: none;">
+
+          <button type="button" id="clearDataBtn" class="settings-row interactive-row danger-row">
+            <span class="row-title text-danger">Reset Ledger Data</span>
+            <svg class="row-chevron text-danger" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg>
+          </button>
         </div>
       </section>
 
     </main>
 
-    <!-- Floating Action Button (Add Expense) -->
-    <button type="button" id="openSnapModalBtn" class="fab" aria-label="Add Expense" title="Add Expense">
-      <span class="fab-icon">+</span>
-      <span class="fab-label">Add Expense</span>
-    </button>
+    <!-- Bottom-Right In-App Quick-Add Toast (Clipboard / Background Payment Preview) -->
+    <aside id="inAppQuickToast" class="quick-toast-card hidden" role="status" aria-live="polite">
+      <div class="qt-header">
+        <div class="qt-title-block">
+          <div class="qt-amount tabular" id="qtAmountTitle">Paid ₹0.00</div>
+          <div class="qt-merchant" id="qtSubtitle">Merchant</div>
+        </div>
+        <button type="button" id="qtCloseBtn" class="qt-close-btn" aria-label="Dismiss">✕</button>
+      </div>
+      <div id="qtContactsRow" class="qt-chips-scroll"></div>
+      <div class="qt-actions">
+        <button type="button" id="qtSecondaryBtn" class="qt-btn qt-btn-secondary">Split</button>
+        <button type="button" id="qtPrimaryBtn" class="qt-btn qt-btn-primary">Quick Add</button>
+      </div>
+    </aside>
 
-    <!-- Bottom Navigation Bar -->
+    <!-- Bottom Navigation -->
     <nav class="bottom-nav">
       <button type="button" class="nav-item active" data-target="viewDashboard">
         <span class="nav-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
         </span>
         <span class="nav-label">Ledger</span>
       </button>
       <button type="button" class="nav-item" data-target="viewPeople">
         <span class="nav-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
         </span>
         <span class="nav-label">People</span>
       </button>
       <button type="button" class="nav-item" data-target="viewSettings">
         <span class="nav-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         </span>
         <span class="nav-label">Settings</span>
       </button>
     </nav>
 
-    <!-- MODAL: FIRST START SETUP & SCANNER PERMISSIONS -->
+    <!-- SHEET: SCANNER SETUP / PERMISSIONS -->
     <div id="setupModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
-      <div class="modal-sheet setup-sheet">
+      <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
           <div>
-            <span class="setup-badge">Permissions</span>
-            <h3 class="setup-title mt-1">Enable Scanner</h3>
+            <span class="eyebrow-tag">Background Service</span>
+            <h3 class="sheet-title mt-1">Scanner Permissions</h3>
           </div>
           <button type="button" id="closeSetupModalBtn" class="btn-close" aria-label="Dismiss">✕</button>
         </div>
 
-        <p class="setup-intro">
-          WhoseTab detects Paytm notifications so you can log expenses instantly. Please enable these 2 permissions:
+        <p class="sheet-desc">
+          Enable these permissions so WhoseTab stays active in the background and shows the quick-add popup on Paytm payments.
         </p>
 
-        <div class="setup-steps-list">
-          <!-- Step 1: Notification Access -->
-          <div class="setup-step-card" id="setupStepNotif">
-            <div class="setup-step-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+        <div class="grouped-list mt-3">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="row-title">Notification Access</span>
+              <span class="row-subtitle">Reads payment &amp; credit notifications</span>
             </div>
-            <div class="setup-step-body">
-              <div class="setup-step-title">1. Notification Access</div>
-              <div class="setup-step-desc">Allows detecting Paytm payment notifications.</div>
-            </div>
-            <button type="button" id="setupGrantNotifBtn" class="btn btn-sm btn-primary setup-action-btn">
-              Enable
-            </button>
+            <button type="button" id="setupGrantNotifBtn" class="btn-status-action">Enable</button>
           </div>
 
-          <!-- Step 2: Display Over Other Apps -->
-          <div class="setup-step-card" id="setupStepOverlay">
-            <div class="setup-step-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="row-title">Status Bar Icon &amp; Alerts</span>
+              <span class="row-subtitle">Allows background indicator notification</span>
             </div>
-            <div class="setup-step-body">
-              <div class="setup-step-title">2. Draw Over Other Apps</div>
-              <div class="setup-step-desc">Allows WhoseTab to open right after a payment is made.</div>
+            <button type="button" id="setupGrantPostNotifBtn" class="btn-status-action">Allow</button>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="row-title">Display Over Other Apps</span>
+              <span class="row-subtitle">Shows bottom-right popup toast</span>
             </div>
-            <button type="button" id="setupGrantOverlayBtn" class="btn btn-sm btn-primary setup-action-btn">
-              Enable
-            </button>
+            <button type="button" id="setupGrantOverlayBtn" class="btn-status-action">Enable</button>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="row-title">Unrestricted Battery</span>
+              <span class="row-subtitle">Prevents system from pausing listener</span>
+            </div>
+            <button type="button" id="setupGrantBatteryBtn" class="btn-status-action">Allow</button>
           </div>
         </div>
 
-        <div class="setup-footer mt-4">
-          <button type="button" id="completeSetupBtn" class="btn btn-primary btn-block btn-lg">
-            Continue
-          </button>
-          <button type="button" id="skipSetupBtn" class="btn btn-text btn-block mt-2">
-            I'll configure this later in Settings
-          </button>
+        <div class="sheet-actions mt-4">
+          <button type="button" id="completeSetupBtn" class="btn btn-primary btn-block btn-lg">Done</button>
+          <button type="button" id="skipSetupBtn" class="btn-text-subtle btn-block mt-2">Configure later in Settings</button>
         </div>
       </div>
     </div>
 
-    <!-- MODAL: ADD / LOG EXPENSE -->
+    <!-- SHEET: CONTACT ACTION MENU -->
+    <div id="personActionsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-sheet action-sheet">
+        <div class="sheet-handle"></div>
+        <div class="action-sheet-header">
+          <div>
+            <h3 class="sheet-title" id="actionPersonName">Contact</h3>
+            <span class="text-xs text-muted" id="actionPersonMeta">Roommate</span>
+          </div>
+          <div class="action-person-bal tabular" id="actionPersonBalance">₹0.00</div>
+        </div>
+
+        <div class="grouped-list mt-3">
+          <button type="button" id="actionSplitBtn" class="settings-row interactive-row">
+            <span class="row-title">Add Expense</span>
+            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </button>
+          <button type="button" id="actionSettleBtn" class="settings-row interactive-row">
+            <span class="row-title text-success">Record Settlement</span>
+            <svg class="row-chevron text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </button>
+          <button type="button" id="actionEditPersonBtn" class="settings-row interactive-row">
+            <span class="row-title">Edit Contact Details</span>
+            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          </button>
+        </div>
+
+        <button type="button" id="closePersonActionsBtn" class="btn btn-secondary btn-block mt-3">Cancel</button>
+      </div>
+    </div>
+
+    <!-- SHEET: ACTIVITY / ENTRY DETAIL -->
+    <div id="activityDetailModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-sheet">
+        <div class="sheet-handle"></div>
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow-tag" id="detailTypeBadge">Expense</span>
+            <h3 class="sheet-title mt-1" id="detailTitle">Merchant</h3>
+          </div>
+          <button type="button" id="closeActivityDetailBtn" class="btn-close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="detail-amount-hero tabular" id="detailAmount">₹0.00</div>
+        <div class="text-xs text-muted" id="detailTimestamp">Today</div>
+
+        <div id="detailSplitsContainer" class="grouped-list mt-4"></div>
+
+        <div class="sheet-actions flex gap-2 mt-4">
+          <button type="button" id="deleteActivityEntryBtn" class="btn btn-danger-ghost flex-1">Delete Entry</button>
+          <button type="button" id="doneActivityDetailBtn" class="btn btn-primary flex-1">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SHEET: ADD / LOG EXPENSE -->
     <div id="snapExpenseModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3 id="modalTitle">Add Expense</h3>
+          <h3 class="sheet-title" id="modalTitle">New Expense</h3>
           <button type="button" id="closeSnapModalBtn" class="btn-close" aria-label="Close">✕</button>
         </div>
 
-        <form id="snapExpenseForm">
-          <!-- In-Modal Validation Error Notice -->
+        <form id="snapExpenseForm" novalidate>
           <div id="snapFormError" class="form-error-banner hidden" role="alert"></div>
 
+          <!-- Hero Numeric Amount -->
+          <div class="hero-input-box">
+            <span class="hero-currency">₹</span>
+            <input type="number" id="snapAmount" class="hero-num-input tabular" placeholder="0.00" step="any" required inputmode="decimal">
+          </div>
+
+          <div class="form-group mt-3">
+            <input type="text" id="snapTitle" class="form-input" placeholder="Description (e.g. Tea Stall, Groceries)">
+          </div>
+
+          <!-- Single-line Scrollable Category Strip -->
           <div class="form-group">
-            <label for="snapAmount" class="form-label">Amount</label>
-            <div class="amount-input-wrap">
-              <span class="currency-prefix">₹</span>
-              <input type="number" id="snapAmount" class="input-amount" placeholder="0" step="any" required inputmode="decimal">
+            <div class="category-strip">
+              <label class="cat-pill"><input type="radio" name="category" value="General" checked><span>General</span></label>
+              <label class="cat-pill"><input type="radio" name="category" value="Groceries"><span>Groceries</span></label>
+              <label class="cat-pill"><input type="radio" name="category" value="FoodDining"><span>Dining</span></label>
+              <label class="cat-pill"><input type="radio" name="category" value="SnacksChai"><span>Snacks</span></label>
+              <label class="cat-pill"><input type="radio" name="category" value="StationeryBooks"><span>Books</span></label>
+              <label class="cat-pill"><input type="radio" name="category" value="RoomRentUtilities"><span>Utilities</span></label>
             </div>
           </div>
 
-          <div class="form-group">
-            <label for="snapTitle" class="form-label">Description</label>
-            <input type="text" id="snapTitle" class="form-input" placeholder="e.g. Groceries, Lunch, Supplies">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Category</label>
-            <div class="category-chips">
-              <label class="cat-radio"><input type="radio" name="category" value="Groceries" checked><span>Groceries</span></label>
-              <label class="cat-radio"><input type="radio" name="category" value="FoodDining"><span>Food & Dining</span></label>
-              <label class="cat-radio"><input type="radio" name="category" value="SnacksChai"><span>Snacks & Drinks</span></label>
-              <label class="cat-radio"><input type="radio" name="category" value="StationeryBooks"><span>Books & Print</span></label>
-              <label class="cat-radio"><input type="radio" name="category" value="RoomRentUtilities"><span>Rent & Utilities</span></label>
-              <label class="cat-radio"><input type="radio" name="category" value="General"><span>General</span></label>
-            </div>
-          </div>
-
+          <!-- Split People Selector -->
           <div class="form-group" id="peopleSelectSection">
             <div class="label-row">
               <label class="form-label">Split between</label>
               <div class="people-actions-row">
-                <button type="button" class="btn-text-xs" id="selectAllPeopleBtn">Select All</button>
-                <button type="button" class="btn-text-xs" id="clearAllPeopleBtn">Clear</button>
+                <button type="button" class="btn-link-xs" id="selectAllPeopleBtn">Select All</button>
+                <button type="button" class="btn-link-xs" id="clearAllPeopleBtn">Clear</button>
               </div>
             </div>
             <div id="modalPeopleChips" class="people-chips-grid"></div>
-            <div id="selectedPeopleSummary" class="text-xs text-muted mt-1">Select people to split with</div>
+            <div id="selectedPeopleSummary" class="text-xs text-muted mt-1">Select contacts</div>
           </div>
 
-          <!-- My Share Input & Live Calculation -->
-          <div class="form-group split-calc-group">
+          <!-- Your Share Bar -->
+          <div class="form-group">
             <div class="label-row">
-              <label for="snapMyShare" class="form-label">My share</label>
-              <span class="text-xs text-muted">Leave empty if ₹0</span>
+              <label for="snapMyShare" class="form-label">Your share</label>
+              <div class="segmented-mini">
+                <button type="button" class="seg-mini-btn active" id="preset100ThemBtn">None for me</button>
+                <button type="button" class="seg-mini-btn" id="presetSplitEvenBtn">Split equally</button>
+              </div>
             </div>
-            <div class="my-share-input-wrap">
-              <span class="currency-prefix-sm">₹</span>
-              <input type="number" id="snapMyShare" class="input-share" placeholder="0.00" step="any" inputmode="decimal">
-              <button type="button" id="clearMyShareBtn" class="btn-clear-share" title="Reset to 0">✕</button>
-            </div>
-            <div class="split-preset-pills mt-2">
-              <button type="button" class="preset-pill active" id="preset100ThemBtn">None for me</button>
-              <button type="button" class="preset-pill" id="presetSplitEvenBtn">Split equally with me</button>
-            </div>
-          </div>
-
-          <!-- Live Split Breakdown Card -->
-          <div id="splitBreakdownCard" class="split-summary-card">
-            <div class="summary-card-header">
-              <span class="summary-card-title">Split Breakdown</span>
-              <span id="summaryFriendsTotal" class="summary-card-total">₹0.00 to collect</span>
-            </div>
-            <div id="summaryBreakdownList" class="summary-breakdown-list">
-              <div class="text-xs text-muted py-1">Select friends above to view split breakdown</div>
+            <div class="compact-amount-field mt-1">
+              <span class="compact-prefix">₹</span>
+              <input type="number" id="snapMyShare" class="compact-num-input tabular" placeholder="0.00" step="any" inputmode="decimal">
+              <button type="button" id="clearMyShareBtn" class="btn-clear-field" title="Clear">✕</button>
             </div>
           </div>
 
-          <div class="modal-footer mt-3">
+          <!-- Breakdown Table -->
+          <div id="splitBreakdownCard" class="breakdown-panel">
+            <div class="breakdown-header">
+              <span class="text-xs text-muted uppercase-label">Breakdown</span>
+              <span id="summaryFriendsTotal" class="breakdown-total tabular">₹0.00 to collect</span>
+            </div>
+            <div id="summaryBreakdownList" class="breakdown-rows"></div>
+          </div>
+
+          <div class="modal-footer mt-4">
             <button type="submit" class="btn btn-primary btn-block btn-lg" id="submitSnapBtn">Save Expense</button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- MODAL: ADD PERSON -->
+    <!-- SHEET: ADD CONTACT -->
     <div id="addPersonModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3>Add Contact</h3>
+          <h3 class="sheet-title">Add Contact</h3>
           <button type="button" id="closeAddPersonModalBtn" class="btn-close">✕</button>
         </div>
-        <form id="addPersonForm">
+        <form id="addPersonForm" novalidate>
           <div class="form-group">
             <label for="personName" class="form-label">Name</label>
-            <input type="text" id="personName" class="form-input" placeholder="e.g. Aman, Priya, Rohit" required>
+            <input type="text" id="personName" class="form-input" placeholder="Full name" required>
           </div>
           <div class="form-group">
-            <label for="personPhone" class="form-label">Phone Number (Optional)</label>
-            <input type="tel" id="personPhone" class="form-input" placeholder="e.g. 9876543210" pattern="[0-9+ -]*">
+            <label for="personPhone" class="form-label">Phone (Optional)</label>
+            <input type="tel" id="personPhone" class="form-input" placeholder="10-digit number" pattern="[0-9+ -]*">
           </div>
           <div class="form-group">
-            <label class="form-label">Relationship</label>
-            <div class="split-toggle-group">
-              <label class="split-btn active"><input type="radio" name="relationship" value="Roommate" checked><span>Roommate</span></label>
-              <label class="split-btn"><input type="radio" name="relationship" value="Classmate"><span>Classmate</span></label>
-              <label class="split-btn"><input type="radio" name="relationship" value="Friend"><span>Friend</span></label>
+            <label for="personUpi" class="form-label">UPI ID (Optional)</label>
+            <input type="text" id="personUpi" class="form-input" placeholder="username@bank">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Group</label>
+            <div class="segmented-bar">
+              <label class="seg-option active"><input type="radio" name="relationship" value="Roommate" checked><span>Roommate</span></label>
+              <label class="seg-option"><input type="radio" name="relationship" value="Classmate"><span>Classmate</span></label>
+              <label class="seg-option"><input type="radio" name="relationship" value="Friend"><span>Friend</span></label>
             </div>
           </div>
-          <div class="form-group">
-            <label for="personUpi" class="form-label">Paytm / UPI ID (Optional)</label>
-            <input type="text" id="personUpi" class="form-input" placeholder="name@paytm">
-          </div>
-          <div class="modal-footer">
-            <button type="submit" class="btn btn-primary btn-block btn-lg">Add Contact</button>
+          <div class="modal-footer mt-3">
+            <button type="submit" class="btn btn-primary btn-block btn-lg">Save Contact</button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- MODAL: EDIT CONTACT -->
+    <!-- SHEET: EDIT CONTACT -->
     <div id="editPersonModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3>Edit Contact</h3>
+          <h3 class="sheet-title">Edit Contact</h3>
           <button type="button" id="closeEditPersonModalBtn" class="btn-close">✕</button>
         </div>
-        <form id="editPersonForm">
+        <form id="editPersonForm" novalidate>
           <input type="hidden" id="editPersonId">
           <div class="form-group">
             <label for="editPersonName" class="form-label">Name</label>
             <input type="text" id="editPersonName" class="form-input" required>
           </div>
           <div class="form-group">
-            <label for="editPersonPhone" class="form-label">Phone Number (Optional)</label>
-            <input type="tel" id="editPersonPhone" class="form-input" placeholder="e.g. 9876543210" pattern="[0-9+ -]*">
+            <label for="editPersonPhone" class="form-label">Phone (Optional)</label>
+            <input type="tel" id="editPersonPhone" class="form-input" placeholder="10-digit number" pattern="[0-9+ -]*">
           </div>
           <div class="form-group">
-            <label class="form-label">Relationship</label>
-            <div class="split-toggle-group">
-              <label class="split-btn" id="editRelRoommate"><input type="radio" name="editRelationship" value="Roommate"><span>Roommate</span></label>
-              <label class="split-btn" id="editRelClassmate"><input type="radio" name="editRelationship" value="Classmate"><span>Classmate</span></label>
-              <label class="split-btn" id="editRelFriend"><input type="radio" name="editRelationship" value="Friend"><span>Friend</span></label>
+            <label for="editPersonUpi" class="form-label">UPI ID (Optional)</label>
+            <input type="text" id="editPersonUpi" class="form-input" placeholder="username@bank">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Group</label>
+            <div class="segmented-bar">
+              <label class="seg-option" id="editRelRoommate"><input type="radio" name="editRelationship" value="Roommate"><span>Roommate</span></label>
+              <label class="seg-option" id="editRelClassmate"><input type="radio" name="editRelationship" value="Classmate"><span>Classmate</span></label>
+              <label class="seg-option" id="editRelFriend"><input type="radio" name="editRelationship" value="Friend"><span>Friend</span></label>
             </div>
           </div>
-          <div class="form-group">
-            <label for="editPersonUpi" class="form-label">Paytm / UPI ID (Optional)</label>
-            <input type="text" id="editPersonUpi" class="form-input" placeholder="name@paytm">
-          </div>
-          <div class="modal-footer flex gap-2">
-            <button type="button" class="btn btn-secondary flex-1" id="deletePersonBtn">Delete</button>
-            <button type="submit" class="btn btn-primary flex-1">Save Changes</button>
+          <div class="modal-footer flex gap-2 mt-3">
+            <button type="button" class="btn btn-danger-ghost flex-1" id="deletePersonBtn">Delete</button>
+            <button type="submit" class="btn btn-primary flex-1">Save</button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- MODAL: SETTLE DEBT -->
+    <!-- SHEET: SETTLE UP -->
     <div id="settleModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3>Settle Up</h3>
+          <h3 class="sheet-title">Record Settlement</h3>
           <button type="button" id="closeSettleModalBtn" class="btn-close">✕</button>
         </div>
-        <form id="settleForm">
-          <div class="settle-person-info" id="settlePersonInfo"></div>
+        <form id="settleForm" novalidate>
+          <div id="settlePersonInfo" class="grouped-list"></div>
           <div class="form-group mt-3">
-            <label for="settleAmount" class="form-label">Settlement Amount (₹)</label>
-            <input type="number" id="settleAmount" class="form-input input-lg" step="any" required>
+            <label for="settleAmount" class="form-label">Amount received (₹)</label>
+            <input type="number" id="settleAmount" class="form-input input-lg tabular" step="any" required inputmode="decimal">
           </div>
           <div class="form-group">
-            <label for="settleNotes" class="form-label">Notes</label>
-            <input type="text" id="settleNotes" class="form-input" placeholder="e.g. Paid via Paytm / Cash">
+            <label for="settleNotes" class="form-label">Note (Optional)</label>
+            <input type="text" id="settleNotes" class="form-input" placeholder="UPI or Cash">
           </div>
-          <div class="modal-footer">
+          <div class="modal-footer mt-3">
             <button type="submit" class="btn btn-success btn-block btn-lg">Confirm Settlement</button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- MODAL: CONFIRM REPAYMENT (DETECTED FROM PAYTM/SMS) -->
+    <!-- SHEET: CONFIRM DETECTED REPAYMENT -->
     <div id="confirmRepaymentModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3>Confirm Repayment</h3>
+          <div>
+            <span class="eyebrow-tag text-success">Incoming Payment</span>
+            <h3 class="sheet-title mt-1">Confirm Repayment</h3>
+          </div>
           <button type="button" id="closeConfirmRepaymentModalBtn" class="btn-close">✕</button>
         </div>
-        <form id="confirmRepaymentForm">
-          <div class="repayment-banner card p-3 mb-3">
-            <div class="text-xs text-muted">Detected Received Payment</div>
-            <div class="repayment-amount-display" id="repaymentAmountDisplay">₹0.00</div>
-            <div class="text-xs text-muted mt-1" id="repaymentSourceDetail">From Bhuvnesh via Paytm</div>
+        <form id="confirmRepaymentForm" novalidate>
+          <div class="repayment-summary-box">
+            <div class="repayment-amount-display tabular" id="repaymentAmountDisplay">₹0.00</div>
+            <div class="text-xs text-muted" id="repaymentSourceDetail">Received from Sender</div>
           </div>
 
-          <div class="form-group">
-            <label for="repaymentPersonSelect" class="form-label">Who sent this repayment?</label>
+          <div class="form-group mt-3">
+            <label for="repaymentPersonSelect" class="form-label">Sender contact</label>
             <select id="repaymentPersonSelect" class="form-input" required></select>
           </div>
 
-          <div class="repayment-balance-preview card p-3 mb-3" id="repaymentBalancePreview"></div>
+          <div class="breakdown-panel mb-3" id="repaymentBalancePreview"></div>
 
           <div class="form-group">
-            <label for="repaymentAmountInput" class="form-label">Amount to settle (₹)</label>
-            <input type="number" id="repaymentAmountInput" class="form-input input-lg" step="any" required inputmode="decimal">
+            <label for="repaymentAmountInput" class="form-label">Amount to credit (₹)</label>
+            <input type="number" id="repaymentAmountInput" class="form-input tabular" step="any" required inputmode="decimal">
           </div>
 
           <div class="form-group">
-            <label for="repaymentNotesInput" class="form-label">Notes (Optional)</label>
-            <input type="text" id="repaymentNotesInput" class="form-input" placeholder="e.g. Repayment via Paytm">
+            <label for="repaymentNotesInput" class="form-label">Note (Optional)</label>
+            <input type="text" id="repaymentNotesInput" class="form-input" placeholder="Repayment via UPI">
           </div>
 
-          <div class="modal-footer flex flex-col gap-2">
-            <button type="submit" class="btn btn-primary btn-block btn-lg" id="confirmRepaymentBtn">Confirm & Settle Balance</button>
-            <button type="button" class="btn btn-secondary btn-block" id="dismissRepaymentBtn">Dismiss (Not a Tab Repayment)</button>
+          <div class="modal-footer flex gap-2 mt-3">
+            <button type="button" class="btn btn-secondary flex-1" id="dismissRepaymentBtn">Ignore</button>
+            <button type="submit" class="btn btn-success flex-1" id="confirmRepaymentBtn">Apply Settlement</button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- MODAL: UPDATE AVAILABLE -->
+    <!-- SHEET: APP UPDATE -->
     <div id="updateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3>Update Available</h3>
+          <h3 class="sheet-title">Update Available</h3>
           <button type="button" id="closeUpdateModalBtn" class="btn-close">✕</button>
         </div>
-        <div class="p-2">
-          <div class="banner-title" id="updateVersionTitle">WhoseTab v1.0.9</div>
-          <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Bug fixes and improvements</div>
+        <div>
+          <div class="row-title" id="updateVersionTitle">WhoseTab v1.1.0</div>
+          <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Improvements and bug fixes.</div>
 
-          <!-- In-App Download Progress Indicator -->
           <div id="updateProgressContainer" class="mt-3 hidden">
             <div class="progress-bar-wrap">
               <div id="updateProgressBar" class="progress-bar-fill" style="width: 0%"></div>
@@ -532,7 +679,7 @@
           </div>
 
           <div class="modal-footer mt-4">
-            <button type="button" id="downloadUpdateBtn" class="btn btn-primary btn-block btn-lg">Download & Install Now</button>
+            <button type="button" id="downloadUpdateBtn" class="btn btn-primary btn-block btn-lg">Install Update</button>
           </div>
         </div>
       </div>

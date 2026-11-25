@@ -4,27 +4,39 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import java.util.HashSet;
 import java.util.Set;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class PaymentDataStore {
 
-    private static final String PREFS_NAME = "whosetab_prefs";
+    public static final String PREFS_NAME = "whosetab_prefs";
     private static final String KEY_PENDING_PAYMENT = "pending_paytm_payment";
-    private static final String KEY_DISMISSED_PAYMENTS = "dismissed_paytm_signatures";
+    private static final String KEY_DISMISSED_PAYMENTS = "dismissed_paytm_instances_v2";
     private static JSONObject inMemoryPayment = null;
 
     private static final String KEY_PENDING_REPAYMENT = "pending_paytm_repayment";
-    private static final String KEY_DISMISSED_REPAYMENTS = "dismissed_repayment_signatures";
+    private static final String KEY_DISMISSED_REPAYMENTS = "dismissed_repayment_instances_v2";
     private static JSONObject inMemoryRepayment = null;
 
+    private static final String KEY_SYNCED_CONTACTS = "synced_contacts_json";
+    private static final String KEY_QUEUED_QUICK_EXPENSES = "queued_quick_expenses_json";
+    public static final String KEY_DETECTION_MODE = "payment_detection_mode"; // "overlay" | "open_app" | "notification"
+
+    /**
+     * Instance-scoped signature so dismissing one ₹20 payment never blocks
+     * a legitimate second ₹20 payment to the same shop later.
+     */
     public static synchronized String getSignature(JSONObject payment) {
         if (payment == null) return "";
         String txnId = payment.optString("txnId", "");
-        if (!txnId.isEmpty()) return txnId;
+        if (!txnId.isEmpty()) return "txn_" + txnId;
+
         double amt = payment.optDouble("amount", 0.0);
         String rec = payment.optString("recipient", "");
-        String note = payment.optString("rawText", payment.optString("note", ""));
-        return String.format("%.2f_%s_%d", amt, rec, note.hashCode());
+        long ts = payment.optLong("postTime", payment.optLong("timestamp", 0L));
+        // Round to 2-second bucket if postTime missing so slightly shifted lookups still match instance
+        long bucket = ts > 0 ? ts : (System.currentTimeMillis() / 2000L);
+        return String.format(java.util.Locale.US, "%.2f_%s_%d", amt, rec, bucket);
     }
 
     public static synchronized boolean isPaymentDismissed(Context context, String signature) {
@@ -40,14 +52,13 @@ public class PaymentDataStore {
         Set<String> dismissed = prefs.getStringSet(KEY_DISMISSED_PAYMENTS, null);
         Set<String> updated = new HashSet<>(dismissed != null ? dismissed : new HashSet<>());
         updated.add(signature);
-        if (updated.size() > 60) {
-            // Keep recent signatures
+        if (updated.size() > 80) {
             Set<String> trimmed = new HashSet<>();
             int count = 0;
             for (String s : updated) {
                 trimmed.add(s);
                 count++;
-                if (count >= 50) break;
+                if (count >= 60) break;
             }
             updated = trimmed;
         }
@@ -58,10 +69,8 @@ public class PaymentDataStore {
         if (payment == null) return;
         String sig = getSignature(payment);
         if (context != null && isPaymentDismissed(context, sig)) {
-            // Already dismissed by the user — do not recreate pending payment
             return;
         }
-
         inMemoryPayment = payment;
         if (context != null) {
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -100,8 +109,7 @@ public class PaymentDataStore {
     public static synchronized JSONObject consumePendingPayment(Context context) {
         JSONObject payment = getPendingPayment(context);
         if (payment != null && context != null) {
-            String sig = getSignature(payment);
-            markPaymentDismissed(context, sig);
+            markPaymentDismissed(context, getSignature(payment));
         }
         inMemoryPayment = null;
         if (context != null) {
@@ -113,8 +121,7 @@ public class PaymentDataStore {
 
     public static synchronized void clearPendingPayment(Context context) {
         if (inMemoryPayment != null && context != null) {
-            String sig = getSignature(inMemoryPayment);
-            markPaymentDismissed(context, sig);
+            markPaymentDismissed(context, getSignature(inMemoryPayment));
         }
         inMemoryPayment = null;
         if (context != null) {
@@ -135,8 +142,9 @@ public class PaymentDataStore {
         if (repayment == null) return "";
         double amt = repayment.optDouble("amount", 0.0);
         String sender = repayment.optString("sender", "");
-        String note = repayment.optString("rawText", repayment.optString("note", ""));
-        return String.format("repay_%.2f_%s_%d", amt, sender, note.hashCode());
+        long ts = repayment.optLong("postTime", repayment.optLong("timestamp", 0L));
+        long bucket = ts > 0 ? ts : (System.currentTimeMillis() / 2000L);
+        return String.format(java.util.Locale.US, "repay_%.2f_%s_%d", amt, sender, bucket);
     }
 
     public static synchronized boolean isRepaymentDismissed(Context context, String signature) {
@@ -152,13 +160,13 @@ public class PaymentDataStore {
         Set<String> dismissed = prefs.getStringSet(KEY_DISMISSED_REPAYMENTS, null);
         Set<String> updated = new HashSet<>(dismissed != null ? dismissed : new HashSet<>());
         updated.add(signature);
-        if (updated.size() > 60) {
+        if (updated.size() > 80) {
             Set<String> trimmed = new HashSet<>();
             int count = 0;
             for (String s : updated) {
                 trimmed.add(s);
                 count++;
-                if (count >= 50) break;
+                if (count >= 60) break;
             }
             updated = trimmed;
         }
@@ -171,7 +179,6 @@ public class PaymentDataStore {
         if (context != null && isRepaymentDismissed(context, sig)) {
             return;
         }
-
         inMemoryRepayment = repayment;
         if (context != null) {
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -210,8 +217,7 @@ public class PaymentDataStore {
     public static synchronized JSONObject consumePendingRepayment(Context context) {
         JSONObject repayment = getPendingRepayment(context);
         if (repayment != null && context != null) {
-            String sig = getRepaymentSignature(repayment);
-            markRepaymentDismissed(context, sig);
+            markRepaymentDismissed(context, getRepaymentSignature(repayment));
         }
         inMemoryRepayment = null;
         if (context != null) {
@@ -223,8 +229,7 @@ public class PaymentDataStore {
 
     public static synchronized void clearPendingRepayment(Context context) {
         if (inMemoryRepayment != null && context != null) {
-            String sig = getRepaymentSignature(inMemoryRepayment);
-            markRepaymentDismissed(context, sig);
+            markRepaymentDismissed(context, getRepaymentSignature(inMemoryRepayment));
         }
         inMemoryRepayment = null;
         if (context != null) {
@@ -238,5 +243,58 @@ public class PaymentDataStore {
             }
             prefs.edit().remove(KEY_PENDING_REPAYMENT).apply();
         }
+    }
+
+    // ================= CONTACTS SYNC & NATIVE QUICK-ADD QUEUE =================
+    public static synchronized void setSyncedContacts(Context context, String contactsJson) {
+        if (context == null || contactsJson == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putString(KEY_SYNCED_CONTACTS, contactsJson).apply();
+    }
+
+    public static synchronized JSONArray getSyncedContacts(Context context) {
+        if (context == null) return new JSONArray();
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String raw = prefs.getString(KEY_SYNCED_CONTACTS, "[]");
+        try {
+            return new JSONArray(raw);
+        } catch (Exception e) {
+            return new JSONArray();
+        }
+    }
+
+    public static synchronized void addQueuedQuickExpense(Context context, JSONObject expense) {
+        if (context == null || expense == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String raw = prefs.getString(KEY_QUEUED_QUICK_EXPENSES, "[]");
+        try {
+            JSONArray arr = new JSONArray(raw);
+            arr.put(expense);
+            prefs.edit().putString(KEY_QUEUED_QUICK_EXPENSES, arr.toString()).apply();
+        } catch (Exception ignored) {}
+    }
+
+    public static synchronized JSONArray consumeQueuedQuickExpenses(Context context) {
+        if (context == null) return new JSONArray();
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String raw = prefs.getString(KEY_QUEUED_QUICK_EXPENSES, "[]");
+        prefs.edit().putString(KEY_QUEUED_QUICK_EXPENSES, "[]").apply();
+        try {
+            return new JSONArray(raw);
+        } catch (Exception e) {
+            return new JSONArray();
+        }
+    }
+
+    public static synchronized String getDetectionMode(Context context) {
+        if (context == null) return "overlay";
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getString(KEY_DETECTION_MODE, "overlay");
+    }
+
+    public static synchronized void setDetectionMode(Context context, String mode) {
+        if (context == null || mode == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putString(KEY_DETECTION_MODE, mode).apply();
     }
 }

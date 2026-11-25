@@ -8,7 +8,6 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -18,6 +17,9 @@ import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.json.JSONObject;
@@ -28,12 +30,18 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
     public static final String PREFS_NAME = "whosetab_prefs";
     public static final String KEY_OPEN_DELAY = "paytm_open_delay_ms";
     private static final String CHANNEL_ID_ALERTS = "paytm_snap_alerts";
-    private static final String CHANNEL_ID_STATUS = "paytm_scanner_status";
-    private static final int STATUS_NOTIFICATION_ID = 1001;
 
-    // Rate patterns like ₹17,867/g, ₹100/mo, etc. (must be rejected)
+    // Rate patterns like ₹17,867/g, ₹100/mo, etc.
     private static final Pattern PER_UNIT_RATE_PATTERN = Pattern.compile(
-        "(?i)(?:₹|rs\\.?|inr)\\s*[0-9,.]+\\s*/\\s*(?:g|gm|kg|mo|month|yr|year|unit)"
+        "(?i)(?:₹|rs\\.?|inr)\\s*[0-9,.]+\\s*/\\s*(?:g|gm|kg|l|ltr|ml|mo|month|yr|year|unit|day|hr)"
+    );
+
+    // Outgoing verb paired with currency or amount
+    private static final Pattern VERB_BEFORE_CURRENCY = Pattern.compile(
+        "(?i)\\b(?:paid|sent|debited|transferred|spent|deducted)\\b.{0,14}(?:₹|rs\\.?|inr|[0-9])"
+    );
+    private static final Pattern CURRENCY_BEFORE_VERB = Pattern.compile(
+        "(?i)(?:₹|rs\\.?|inr)\\s*[0-9,.]+.{0,24}\\b(?:paid|sent|debited|transferred|spent|deducted)\\b"
     );
 
     // Incoming repayment patterns
@@ -42,51 +50,28 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
         Pattern.compile("(?i)(?:₹|rs\\.?|inr)\\s*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]{1,2})?)\\s*(?:received|credited)")
     };
 
-    // Matches valid payment amounts, but NOT rate quotes like ₹17,867/g
+    // Outgoing payment amount extraction (rejects rate quotes like ₹17,867/g)
     private static final Pattern AMOUNT_PATTERN = Pattern.compile(
-        "(?i)(?:paid|sent|transfer(?:red)?(?: of)?|debited (?:by|from)?|payment(?: of)?|rs\\.?|inr|₹)\\s*(?:rs\\.?|inr|₹)?\\s*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]{1,2})?)(?!\\s*/\\s*(?:g|gm|kg|mo|month|yr|year))"
+        "(?i)(?:paid|sent|transfer(?:red)?(?: of)?|debited (?:by|from|for)?|payment(?: of)?|rs\\.?|inr|₹)\\s*(?:rs\\.?|inr|₹)?\\s*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]{1,2})?)(?!\\s*/\\s*(?:g|gm|kg|l|ltr|mo|month|yr|year))"
     );
 
     private static final Pattern[] RECIPIENT_PATTERNS = new Pattern[] {
-        Pattern.compile("(?i)(?:to|at|for)\\s+(?:vpa\\s+)?([A-Za-z0-9\\s&'._@-]+?)(?=(?:\\s+(?:successfully|successful|via|on|ref|upi|txn|is successful|from|using)|[.,]|$))"),
-        Pattern.compile("(?i)payment to\\s+(?:vpa\\s+)?([A-Za-z0-9\\s&'._@-]+?)(?=(?::|\\s+(?:successfully|successful|via|of)|[.,]|$))")
+        Pattern.compile("(?i)(?:to|at|towards)\\s+(?:vpa\\s+)?([A-Za-z0-9\\s&'._/@*-]+?)(?=(?:\\s+(?:successfully|successful|via|on|in|into|from|using|with|ref|upi|txn|is successful|a/c|acct)|[.,;]|$))"),
+        Pattern.compile("(?i)payment to\\s+(?:vpa\\s+)?([A-Za-z0-9\\s&'._/@*-]+?)(?=(?::|\\s+(?:successfully|successful|via|of|using)|[.,;]|$))"),
+        Pattern.compile("(?i);\\s*([A-Za-z0-9\\s&'._@-]+?)\\s+credited(?:\\s|\\.|;|$)")
     };
 
     private static final Pattern TXN_PATTERN = Pattern.compile(
-        "(?i)(?:txn(?: id)?|ref(?: no)?|upi ref)[:\\s]+([A-Za-z0-9]+)"
+        "(?i)(?:txn(?: id)?|ref(?: no)?|upi ref|rrn)[:\\s#]+([A-Za-z0-9]+)"
     );
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private static boolean isServiceRunning = false;
-    private static final java.util.Map<String, Long> recentlyProcessedSignatures = new java.util.concurrent.ConcurrentHashMap<>();
+    private static volatile boolean isServiceRunning = false;
 
-    private static boolean isRecentlyProcessed(String signature) {
-        if (signature == null || signature.isEmpty()) return false;
-        Long ts = recentlyProcessedSignatures.get(signature);
-        if (ts != null) {
-            // If seen within last 10 minutes, treat as duplicate
-            if (System.currentTimeMillis() - ts < 600000L) {
-                return true;
-            } else {
-                recentlyProcessedSignatures.remove(signature);
-            }
-        }
-        return false;
-    }
-
-    private static void recordProcessed(String signature) {
-        if (signature == null || signature.isEmpty()) return;
-        recentlyProcessedSignatures.put(signature, System.currentTimeMillis());
-        // Clean up old entries
-        if (recentlyProcessedSignatures.size() > 50) {
-            long now = System.currentTimeMillis();
-            for (java.util.Map.Entry<String, Long> e : recentlyProcessedSignatures.entrySet()) {
-                if (now - e.getValue() > 600000L) {
-                    recentlyProcessedSignatures.remove(e.getKey());
-                }
-            }
-        }
-    }
+    // Cross-app 15s amount deduplication (prevents Paytm + HDFC SMS double-firing for one transaction)
+    private static final Map<String, Long> recentAmountTimestamps = new ConcurrentHashMap<>();
+    // Exact SBN instance deduplication
+    private static final Map<String, Long> recentSbnEvents = new ConcurrentHashMap<>();
 
     public static boolean isRunning() {
         return isServiceRunning;
@@ -95,10 +80,10 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
     @Override
     public void onCreate() {
         super.onCreate();
-        createNotificationChannels();
+        createAlertChannel();
         isServiceRunning = true;
-        showBackgroundStatusNotification();
-        Log.d(TAG, "PaytmNotificationListenerService started and running in background.");
+        ScannerForegroundService.ensureRunning(this);
+        Log.d(TAG, "PaytmNotificationListenerService created.");
     }
 
     @Override
@@ -111,33 +96,80 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
     public void onListenerConnected() {
         super.onListenerConnected();
         isServiceRunning = true;
-        showBackgroundStatusNotification();
+        ScannerForegroundService.ensureRunning(this);
         Log.d(TAG, "Notification Listener connected successfully!");
+    }
+
+    @Override
+    public void onListenerDisconnected() {
+        super.onListenerDisconnected();
+        isServiceRunning = false;
+        Log.w(TAG, "Notification Listener disconnected.");
+    }
+
+    private static boolean isDuplicateSbn(String sbnInstanceKey) {
+        if (sbnInstanceKey == null || sbnInstanceKey.isEmpty()) return false;
+        Long ts = recentSbnEvents.get(sbnInstanceKey);
+        long now = System.currentTimeMillis();
+        if (ts != null && (now - ts < 300000L)) {
+            return true;
+        }
+        recentSbnEvents.put(sbnInstanceKey, now);
+        if (recentSbnEvents.size() > 80) {
+            recentSbnEvents.entrySet().removeIf(e -> now - e.getValue() > 300000L);
+        }
+        return false;
+    }
+
+    private static boolean isRecentAmountDuplicate(double amount, boolean isRepayment) {
+        String key = (isRepayment ? "R_" : "E_") + Math.round(amount * 100);
+        Long ts = recentAmountTimestamps.get(key);
+        long now = System.currentTimeMillis();
+        // 15 seconds collapses simultaneous Paytm notification + HDFC/SBI bank SMS
+        if (ts != null && (now - ts < 15000L)) {
+            return true;
+        }
+        recentAmountTimestamps.put(key, now);
+        if (recentAmountTimestamps.size() > 50) {
+            recentAmountTimestamps.entrySet().removeIf(e -> now - e.getValue() > 60000L);
+        }
+        return false;
     }
 
     public static boolean isMarketingOrSpam(String text) {
         if (text == null || text.trim().isEmpty()) return true;
         String lower = text.toLowerCase();
 
-        String[] promoKeywords = new String[] {
+        // Hard promo / security / investment blocks
+        String[] hardBlocks = new String[] {
             "buy gold", "paytm gold", "gold price", "drop in gold", "per gram",
-            "cashback", "cash back", "scratch card", "win up to", "won up to", "flat rs", "flat ₹", "flat inr",
-            "save up to", "earn up to", "up to ₹", "up to rs", "coupon", "voucher", "promo code", "use code",
-            "off on", "% off", "discount", "free delivery",
-            "loan", "pre-approved", "pre approved", "credit card", "credit score", "cibil", "postpaid",
-            "mutual fund", "sip", "stocks", "ipo", "sensex", "nifty", "insurance", "fixed deposit",
+            "scratch card", "win up to", "won up to", "pre-approved", "pre approved",
+            "credit card", "credit score", "cibil", "mutual fund", "sip ",
+            "stocks", "ipo ", "sensex", "nifty", "fixed deposit",
             "buy now", "shop now", "invest now", "apply now", "order now", "book now", "recharge now",
             "otp", "one time password", "verification code", "do not share", "secret code",
             "rate drop", "massive drop", "price drop", "special offer", "limited period",
+            "save up to", "earn up to", "up to ₹", "up to rs", "flat rs", "flat ₹", "flat inr",
             "refund"
         };
-
-        for (String kw : promoKeywords) {
+        for (String kw : hardBlocks) {
             if (lower.contains(kw)) return true;
         }
 
         if (PER_UNIT_RATE_PATTERN.matcher(text).find()) {
             return true;
+        }
+
+        // Soft promo terms: reject unless notification contains an explicit paid/sent/debited action
+        boolean hasExplicitDebit = lower.contains("paid") || lower.contains("debited") || VERB_BEFORE_CURRENCY.matcher(text).find();
+        if (!hasExplicitDebit) {
+            String[] softBlocks = new String[] {
+                "cashback", "cash back", "coupon", "voucher", "promo code", "use code",
+                "% off", "off on", "discount", "free delivery", "loan", "insurance", "postpaid"
+            };
+            for (String kw : softBlocks) {
+                if (lower.contains(kw)) return true;
+            }
         }
 
         return false;
@@ -146,6 +178,17 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
     public static boolean isIncomingPayment(String fullText) {
         if (fullText == null || fullText.trim().isEmpty()) return false;
         String lower = fullText.toLowerCase();
+
+        // Never treat cashback or rewards as friend repayment
+        if (lower.contains("cashback") || lower.contains("cash back") || lower.contains("reward") || lower.contains("refund")) {
+            return false;
+        }
+
+        // Guard against debit SMS like "ICICI Acct XX123 debited for Rs 120; MERCHANT credited"
+        if (lower.contains("debited") || lower.contains("sent to") || lower.contains("paid to")
+                || lower.contains("payment to") || lower.contains("money sent") || lower.contains("trf to")) {
+            return false;
+        }
 
         String[] creditKeywords = new String[] {
             "received", "credited", "sent you", "credit alert"
@@ -165,29 +208,25 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
     private static String extractSender(String text) {
         if (text == null || text.trim().isEmpty()) return null;
 
-        // 1. "from Bhuvnesh" or "from VPA *7113@wahdfcbank"
         Matcher m1 = Pattern.compile("(?i)(?:from|by\\s+vpa)\\s+(?:vpa\\s+)?([A-Za-z0-9*@._-]+(?:\\s+[A-Za-z0-9*@._-]+)?)(?=(?:\\s+(?:deposited|credited|via|on|in|into|ref|upi|\\.)|[.,(]|$))").matcher(text);
         if (m1.find() && m1.group(1) != null) {
             String s = m1.group(1).replaceAll("(?i)(?:Deposited|via|credited).*$", "").trim();
-            if (s.length() > 1 && !s.matches("(?i)^(hdfc|sbi|icici|axis|bank|account|a/c|vpa|inr|rs|upi|[0-9.]+)$")) {
+            if (s.length() > 1 && !s.matches("(?i)^(hdfc|sbi|icici|axis|kotak|bank|account|a/c|vpa|inr|rs|upi|[0-9.]+)$")) {
                 return s;
             }
         }
 
-        // 2. "Bhuvnesh sent you..."
         Matcher m2 = Pattern.compile("(?i)([A-Za-z0-9&'._-]+(?:\\s+[A-Za-z0-9&'._-]+)?)\\s+sent you").matcher(text);
         if (m2.find() && m2.group(1) != null) {
             String s = m2.group(1).replaceAll("(?i)^Google\\s+Pay\\s+", "").trim();
             if (s.length() > 1) return s;
         }
 
-        // 3. UPI/.../kavya@okicici/... in bank SMS
         Matcher m3 = Pattern.compile("(?i)upi/(?:[0-9]+)/([A-Za-z0-9*@._-]+)").matcher(text);
         if (m3.find() && m3.group(1) != null) {
             return m3.group(1).trim();
         }
 
-        // 4. VPA *7113@wahdfcbank
         Matcher m4 = Pattern.compile("(?i)vpa\\s+([A-Za-z0-9*@._-]+)").matcher(text);
         if (m4.find() && m4.group(1) != null) {
             return m4.group(1).trim();
@@ -236,6 +275,7 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
     public static boolean hasPaymentActionIndicator(String text) {
         if (text == null || text.trim().isEmpty()) return false;
         String lower = text.toLowerCase();
+
         String[] actionIndicators = new String[] {
             "paid",
             "payment of",
@@ -245,6 +285,8 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
             "debited",
             "sent to",
             "money sent",
+            "you sent",
+            "trf to",
             "transferred",
             "transfer of",
             "transfer successful",
@@ -253,121 +295,19 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
         for (String ind : actionIndicators) {
             if (lower.contains(ind)) return true;
         }
+
+        // Handles "Sent Rs. 114.73 From HDFC...", "₹50.00 sent", "Paid via UPI"
+        if (VERB_BEFORE_CURRENCY.matcher(text).find() || CURRENCY_BEFORE_VERB.matcher(text).find()) {
+            return true;
+        }
+
         return false;
     }
 
-    @Override
-    public void onNotificationPosted(StatusBarNotification sbn) {
-        if (sbn == null) return;
-
-        Notification notification = sbn.getNotification();
-        if (notification == null) return;
-
-        // Skip promotional notification categories defined by Android
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            String cat = notification.category;
-            if (Notification.CATEGORY_PROMO.equals(cat) 
-                    || Notification.CATEGORY_RECOMMENDATION.equals(cat)
-                    || Notification.CATEGORY_STATUS.equals(cat)) {
-                return;
-            }
-        }
-
-        String pkg = sbn.getPackageName() != null ? sbn.getPackageName().toLowerCase() : "";
-        Bundle extras = notification.extras;
-        if (extras == null) return;
-
-        CharSequence title = extras.getCharSequence(Notification.EXTRA_TITLE);
-        CharSequence text = extras.getCharSequence(Notification.EXTRA_TEXT);
-        CharSequence bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
-        CharSequence subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT);
-
-        // Filter out promotional subtext (e.g. "Paytm Gold", "Paytm Deals")
-        if (subText != null) {
-            String sub = subText.toString().toLowerCase();
-            if (sub.contains("gold") || sub.contains("offer") || sub.contains("deal") 
-                    || sub.contains("mall") || sub.contains("money") || sub.contains("postpaid")) {
-                Log.d(TAG, "Ignoring promotional notification with subText: " + sub);
-                return;
-            }
-        }
-
-        StringBuilder fullText = new StringBuilder();
-        if (title != null) fullText.append(title).append(" ");
-        if (text != null) fullText.append(text).append(" ");
-        if (bigText != null) fullText.append(bigText).append(" ");
-        if (subText != null) fullText.append(subText);
-
-        String fullBody = fullText.toString().trim();
-        if (fullBody.isEmpty()) return;
-
-        // 1. Strict rejection of marketing, spam, and promo
-        if (isMarketingOrSpam(fullBody)) {
-            Log.d(TAG, "Rejected non-payment/promo notification from pkg [" + pkg + "]: " + fullBody);
-            return;
-        }
-
-        // 2. Check if INCOMING REPAYMENT (Payback from contact via Paytm, PhonePe, GPay, or Bank SMS)
-        JSONObject incoming = parseIncomingPayment(title, text, fullBody);
-        if (incoming != null) {
-            String sig = PaymentDataStore.getRepaymentSignature(incoming);
-            if (PaymentDataStore.isRepaymentDismissed(this, sig) || isRecentlyProcessed(sig)) {
-                Log.d(TAG, "Ignoring already dismissed or duplicate repayment notification: " + sig);
-                return;
-            }
-            recordProcessed(sig);
-
-            Log.d(TAG, "Parsed incoming repayment: ₹" + incoming.optDouble("amount") + " from " + incoming.optString("sender"));
-            PaymentDataStore.setPendingRepayment(this, incoming);
-            triggerRepaymentAlert(incoming, fullBody);
-            return;
-        }
-
-        // 3. Check if OUTGOING PAYMENT (Expense)
-        boolean isSupportedApp = pkg.contains("paytm") || pkg.contains("phonepe") 
-                || pkg.contains("google.android.apps.nbu.paisa") || pkg.contains("bhim");
-
-        if (!isSupportedApp && !hasPaymentActionIndicator(fullBody)) {
-            return;
-        }
-
-        if (!hasPaymentActionIndicator(fullBody)) {
-            return;
-        }
-
-        Log.d(TAG, "Legitimate payment candidate intercepted from pkg [" + pkg + "]: " + fullBody);
-        JSONObject parsed = parseRawText(fullBody);
-        if (parsed != null) {
-            String sig = PaymentDataStore.getSignature(parsed);
-            if (PaymentDataStore.isPaymentDismissed(this, sig) || isRecentlyProcessed(sig)) {
-                Log.d(TAG, "Ignoring already dismissed or duplicate payment notification: " + sig);
-                return;
-            }
-            recordProcessed(sig);
-
-            double amount = parsed.optDouble("amount", 0.0);
-            String recipient = parsed.optString("recipient", "Merchant");
-            String txnId = parsed.optString("txnId", "");
-            String category = parsed.optString("suggestedCategory", "General");
-
-            Log.d(TAG, "Parsed payment: ₹" + amount + " to " + recipient);
-            PaymentDataStore.setPendingPayment(this, parsed);
-            triggerAppOpen(amount, recipient, txnId, category, fullBody);
-        }
-    }
-
-    public static JSONObject parseRawText(String fullBody) {
+    public static JSONObject parseRawText(String title, String text, String fullBody) {
         if (fullBody == null || fullBody.trim().isEmpty()) return null;
-
-        // 1. Strict Spam & Promotional Filter
-        if (isMarketingOrSpam(fullBody)) {
-            return null;
-        }
-
-        // 2. Affirmative Payment Action Verification
-        if (!hasPaymentActionIndicator(fullBody)) {
-            return null;
-        }
+        if (isMarketingOrSpam(fullBody)) return null;
+        if (!hasPaymentActionIndicator(fullBody)) return null;
 
         Matcher amtMatcher = AMOUNT_PATTERN.matcher(fullBody);
         if (!amtMatcher.find()) return null;
@@ -385,15 +325,29 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
             Matcher recMatcher = pat.matcher(fullBody);
             if (recMatcher.find() && recMatcher.group(1) != null) {
                 String candidate = recMatcher.group(1).trim();
-                if (candidate.length() > 1 && !candidate.equalsIgnoreCase("rs") 
-                        && !candidate.equalsIgnoreCase("inr") && !candidate.equals("₹") 
-                        && !candidate.equalsIgnoreCase("vpa")) {
+                if (candidate.length() > 1 && !candidate.equalsIgnoreCase("rs")
+                        && !candidate.equalsIgnoreCase("inr") && !candidate.equals("₹")
+                        && !candidate.equalsIgnoreCase("vpa") && !candidate.matches("^[0-9.,\\s]+$")) {
                     recipient = candidate;
-                    if (recipient.length() > 40) recipient = recipient.substring(0, 40);
                     break;
                 }
             }
         }
+
+        // Fallback when title = "Paid ₹50" and body text is the merchant name directly (e.g. "Sharma Tea Stall")
+        if ("Merchant".equals(recipient) && text != null && !text.trim().isEmpty()) {
+            String cleanedText = text.trim()
+                .replaceAll("(?i)(?:₹|rs\\.?|inr)\\s*[0-9,.]+", "")
+                .replaceAll("(?i)\\b(?:paid|sent|successful|successfully|payment|upi|via|using|from|your|hdfc|sbi|icici|axis|kotak|bank|a/c|xx[0-9]+)\\b", "")
+                .replaceAll("[•|·-]{1,}", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+            if (cleanedText.length() >= 2 && cleanedText.length() <= 40 && !cleanedText.matches("^[0-9.,\\s]+$")) {
+                recipient = cleanedText;
+            }
+        }
+
+        if (recipient.length() > 40) recipient = recipient.substring(0, 40).trim();
 
         String txnId = "";
         Matcher txnMatcher = TXN_PATTERN.matcher(fullBody);
@@ -403,11 +357,11 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
 
         String lower = fullBody.toLowerCase();
         String category = "General";
-        if (lower.contains("grocer") || lower.contains("kirana") || lower.contains("mart") || lower.contains("milk") || lower.contains("vegetable")) {
+        if (lower.contains("grocer") || lower.contains("kirana") || lower.contains("mart") || lower.contains("milk") || lower.contains("vegetable") || lower.contains("zepto") || lower.contains("blinkit")) {
             category = "Groceries";
-        } else if (lower.contains("food") || lower.contains("canteen") || lower.contains("cafe") || lower.contains("restaurant") || lower.contains("zomato") || lower.contains("swiggy")) {
+        } else if (lower.contains("food") || lower.contains("canteen") || lower.contains("cafe") || lower.contains("restaurant") || lower.contains("zomato") || lower.contains("swiggy") || lower.contains("sweets")) {
             category = "FoodDining";
-        } else if (lower.contains("chai") || lower.contains("tea") || lower.contains("samosa") || lower.contains("juice") || lower.contains("bakery")) {
+        } else if (lower.contains("chai") || lower.contains("tea") || lower.contains("samosa") || lower.contains("juice") || lower.contains("bakery") || lower.contains("coffee")) {
             category = "SnacksChai";
         } else if (lower.contains("stationery") || lower.contains("book") || lower.contains("xerox") || lower.contains("print") || lower.contains("lab")) {
             category = "StationeryBooks";
@@ -417,6 +371,7 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
 
         try {
             JSONObject obj = new JSONObject();
+            obj.put("type", "expense");
             obj.put("amount", amount);
             obj.put("recipient", recipient);
             obj.put("txnId", txnId);
@@ -428,55 +383,196 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
         }
     }
 
-    private void triggerAppOpen(double amount, String recipient, String txnId, String category, String raw) {
-        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        long delayMs = prefs.getLong(KEY_OPEN_DELAY, 0);
+    @Override
+    public void onNotificationPosted(StatusBarNotification sbn) {
+        if (sbn == null) return;
+
+        String pkg = sbn.getPackageName() != null ? sbn.getPackageName().toLowerCase() : "";
+        // Never listen to our own app's notifications
+        if (pkg.equals(getPackageName().toLowerCase())) return;
+
+        Notification notification = sbn.getNotification();
+        if (notification == null) return;
+
+        // Ignore group summaries and persistent ongoing notifications (media players, ongoing foreground banners)
+        if ((notification.flags & Notification.FLAG_GROUP_SUMMARY) != 0
+                || (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0) {
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            String cat = notification.category;
+            if (Notification.CATEGORY_PROMO.equals(cat) || Notification.CATEGORY_RECOMMENDATION.equals(cat)) {
+                return;
+            }
+        }
+
+        Bundle extras = notification.extras;
+        if (extras == null) return;
+
+        CharSequence titleSeq = extras.getCharSequence(Notification.EXTRA_TITLE);
+        CharSequence textSeq = extras.getCharSequence(Notification.EXTRA_TEXT);
+        CharSequence bigTextSeq = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
+        CharSequence subTextSeq = extras.getCharSequence(Notification.EXTRA_SUB_TEXT);
+        CharSequence[] linesSeq = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
+
+        // Only filter unmistakably marketing subText channels (NOTE: removed "money" because Paytm Money Transfer uses it!)
+        if (subTextSeq != null) {
+            String sub = subTextSeq.toString().toLowerCase();
+            if (sub.contains("gold") || sub.contains("offer") || sub.contains("deal")
+                    || sub.contains("mall") || sub.contains("reward")) {
+                Log.d(TAG, "Ignoring promotional channel subText: " + sub);
+                return;
+            }
+        }
+
+        String titleStr = titleSeq != null ? titleSeq.toString().trim() : "";
+        String textBodyStr = (bigTextSeq != null && bigTextSeq.length() > 0)
+            ? bigTextSeq.toString().trim()
+            : (textSeq != null ? textSeq.toString().trim() : "");
+
+        StringBuilder fullText = new StringBuilder();
+        if (!titleStr.isEmpty()) fullText.append(titleStr).append(" ");
+        if (!textBodyStr.isEmpty()) fullText.append(textBodyStr).append(" ");
+        if (linesSeq != null) {
+            for (CharSequence line : linesSeq) {
+                if (line != null && line.length() > 0) {
+                    fullText.append(line).append(" ");
+                }
+            }
+        }
+        String fullBody = fullText.toString().trim();
+        if (fullBody.isEmpty()) return;
+
+        // Instance dedup for Android shade updates
+        String sbnInstance = sbn.getKey() + "_" + sbn.getPostTime();
+        if (isDuplicateSbn(sbnInstance)) return;
+
+        if (isMarketingOrSpam(fullBody)) {
+            Log.d(TAG, "Ignored non-payment notification [" + pkg + "]: " + fullBody);
+            return;
+        }
+
+        long postTime = sbn.getPostTime() > 0 ? sbn.getPostTime() : System.currentTimeMillis();
+
+        // 1. Check INCOMING REPAYMENT first
+        JSONObject incoming = parseIncomingPayment(titleSeq, textSeq, fullBody);
+        if (incoming != null) {
+            try { incoming.put("postTime", postTime); } catch (Exception ignored) {}
+            double amount = incoming.optDouble("amount", 0.0);
+            String sig = PaymentDataStore.getRepaymentSignature(incoming);
+            if (PaymentDataStore.isRepaymentDismissed(this, sig) || isRecentAmountDuplicate(amount, true)) {
+                return;
+            }
+
+            Log.d(TAG, "Detected incoming repayment: ₹" + amount + " from " + incoming.optString("sender"));
+            PaymentDataStore.setPendingRepayment(this, incoming);
+            handleDetectedEvent(incoming, true);
+            return;
+        }
+
+        // 2. Check OUTGOING PAYMENT (Shop, P2P, Bank SMS)
+        if (!hasPaymentActionIndicator(fullBody)) {
+            return;
+        }
+
+        JSONObject parsed = parseRawText(titleStr, textBodyStr, fullBody);
+        if (parsed != null) {
+            try { parsed.put("postTime", postTime); } catch (Exception ignored) {}
+            double amount = parsed.optDouble("amount", 0.0);
+            String sig = PaymentDataStore.getSignature(parsed);
+            if (PaymentDataStore.isPaymentDismissed(this, sig) || isRecentAmountDuplicate(amount, false)) {
+                return;
+            }
+
+            Log.d(TAG, "Detected payment [" + pkg + "]: ₹" + amount + " to " + parsed.optString("recipient"));
+            PaymentDataStore.setPendingPayment(this, parsed);
+            handleDetectedEvent(parsed, false);
+        }
+    }
+
+    private void handleDetectedEvent(JSONObject data, boolean isRepayment) {
+        ScannerForegroundService.ensureRunning(this);
+
+        // If app is already open in front of user, dispatch straight to WebView modal without overlay
+        if (MainActivity.isActivityForeground) {
+            MainActivity.dispatchFromServiceIfVisible(data, isRepayment);
+            return;
+        }
+
+        double amount = data.optDouble("amount", 0.0);
+        String counterparty = isRepayment
+            ? data.optString("sender", "Someone")
+            : data.optString("recipient", "Merchant");
 
         Intent openIntent = new Intent(this, MainActivity.class);
+        if (isRepayment) {
+            openIntent.putExtra("paytm_type", "repayment");
+            openIntent.putExtra("paytm_sender", counterparty);
+        } else {
+            openIntent.putExtra("paytm_recipient", counterparty);
+            openIntent.putExtra("paytm_txnId", data.optString("txnId", ""));
+            openIntent.putExtra("paytm_category", data.optString("suggestedCategory", "General"));
+        }
         openIntent.putExtra("paytm_amount", amount);
-        openIntent.putExtra("paytm_recipient", recipient);
-        openIntent.putExtra("paytm_txnId", txnId);
-        openIntent.putExtra("paytm_category", category);
-        openIntent.putExtra("paytm_note", raw);
-        openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
-                | Intent.FLAG_ACTIVITY_CLEAR_TOP 
-                | Intent.FLAG_ACTIVITY_SINGLE_TOP 
+        openIntent.putExtra("paytm_note", data.optString("rawText", ""));
+        openIntent.putExtra("paytm_postTime", data.optLong("postTime", 0L));
+        openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP
                 | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
 
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this,
-            (int) System.currentTimeMillis(),
+            (int) (System.currentTimeMillis() & 0xFFFFFF),
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
         );
 
-        // Heads-up Notification with FullScreenIntent
+        String notifTitle = isRepayment
+            ? String.format(Locale.US, "Received ₹%.2f from %s", amount, counterparty)
+            : String.format(Locale.US, "Paid ₹%.2f to %s", amount, counterparty);
+        String notifBody = isRepayment
+            ? "Tap to confirm settlement balance in WhoseTab"
+            : "Tap to add to a person's tab";
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID_ALERTS)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("WhoseTab — Paid ₹" + String.format("%.2f", amount))
-            .setContentText("Tap to choose who you bought this for (" + recipient + ")")
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setSmallIcon(R.drawable.ic_stat_whosetab)
+            .setContentTitle(notifTitle)
+            .setContentText(notifBody)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .setDefaults(Notification.DEFAULT_ALL)
-            .setContentIntent(pendingIntent)
-            .setFullScreenIntent(pendingIntent, true);
+            .setContentIntent(pendingIntent);
 
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) {
-            nm.notify((int) System.currentTimeMillis(), builder.build());
+            nm.notify((int) (System.currentTimeMillis() & 0xFFFFFF), builder.build());
         }
 
-        // Schedule Activity Launch with Background Activity Launch (BAL) bypass on Android 14/15/16
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        long delayMs = prefs.getLong(KEY_OPEN_DELAY, 0);
+        String mode = PaymentDataStore.getDetectionMode(this);
+
+        if ("notification".equals(mode)) {
+            return;
+        }
+
+        boolean canOverlay = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this);
+
         handler.postDelayed(() -> {
+            if ("overlay".equals(mode) && canOverlay) {
+                // Show sleek compact floating Quick-Add toast at bottom-right over Paytm
+                PaymentOverlayManager.showPaymentToast(PaytmNotificationListenerService.this, data);
+                return;
+            }
+
+            // Fallback or explicit "open_app" mode: bring MainActivity to foreground
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    // Android 14/15/16 BAL bypass
                     ActivityOptions options = ActivityOptions.makeBasic();
                     options.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
                     try {
                         pendingIntent.send(this, 0, null, null, null, null, options.toBundle());
-                        Log.d(TAG, "Sent pendingIntent with MODE_BACKGROUND_ACTIVITY_START_ALLOWED");
                     } catch (Exception ex) {
                         startActivity(openIntent, options.toBundle());
                     }
@@ -484,8 +580,6 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
                     startActivity(openIntent);
                 }
             } catch (Exception e) {
-                Log.e(TAG, "Background activity launch exception: " + e.getMessage());
-                // Overlay fallback: start via activity
                 try {
                     startActivity(openIntent);
                 } catch (Exception ignored) {}
@@ -493,114 +587,19 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
         }, delayMs);
     }
 
-    private void triggerRepaymentAlert(JSONObject incoming, String raw) {
-        double amount = incoming.optDouble("amount", 0.0);
-        String sender = incoming.optString("sender", "Someone");
-
-        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        long delayMs = prefs.getLong(KEY_OPEN_DELAY, 0);
-
-        Intent openIntent = new Intent(this, MainActivity.class);
-        openIntent.putExtra("paytm_type", "repayment");
-        openIntent.putExtra("paytm_amount", amount);
-        openIntent.putExtra("paytm_sender", sender);
-        openIntent.putExtra("paytm_note", raw);
-        openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
-                | Intent.FLAG_ACTIVITY_CLEAR_TOP 
-                | Intent.FLAG_ACTIVITY_SINGLE_TOP 
-                | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-            this,
-            (int) System.currentTimeMillis(),
-            openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
-        );
-
-        // Heads-up Notification with FullScreenIntent
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID_ALERTS)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("WhoseTab — Repayment: ₹" + String.format("%.2f", amount))
-            .setContentText("Received from " + sender + ". Tap to confirm settling balance.")
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setAutoCancel(true)
-            .setDefaults(Notification.DEFAULT_ALL)
-            .setContentIntent(pendingIntent)
-            .setFullScreenIntent(pendingIntent, true);
-
-        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null) {
-            nm.notify((int) System.currentTimeMillis(), builder.build());
-        }
-
-        handler.postDelayed(() -> {
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    ActivityOptions options = ActivityOptions.makeBasic();
-                    options.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
-                    try {
-                        pendingIntent.send(this, 0, null, null, null, null, options.toBundle());
-                    } catch (Exception ex) {
-                        startActivity(openIntent, options.toBundle());
-                    }
-                } else {
-                    startActivity(openIntent);
-                }
-            } catch (Exception e) {
-                try {
-                    startActivity(openIntent);
-                } catch (Exception ignored) {}
-            }
-        }, delayMs);
-    }
-
-    private void showBackgroundStatusNotification() {
-        Intent appIntent = new Intent(this, MainActivity.class);
-        PendingIntent pi = PendingIntent.getActivity(
-            this, 0, appIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
-        );
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID_STATUS)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("WhoseTab Scanner Active")
-            .setContentText("Listening for Paytm payments in background")
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(true)
-            .setContentIntent(pi);
-
-        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null) {
-            nm.notify(STATUS_NOTIFICATION_ID, builder.build());
-        }
-    }
-
-    private void createNotificationChannels() {
+    private void createAlertChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager nm = getSystemService(NotificationManager.class);
             if (nm == null) return;
-
-            // Alerts channel (High priority for payment snap)
             NotificationChannel alertChannel = new NotificationChannel(
                 CHANNEL_ID_ALERTS,
-                "Payment Snap Alerts",
+                "Payment Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             );
-            alertChannel.setDescription("Alerts and auto-opens WhoseTab when a payment occurs");
+            alertChannel.setDescription("Alerts when a payment or repayment is detected");
             alertChannel.enableVibration(true);
             alertChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             nm.createNotificationChannel(alertChannel);
-
-            // Status channel (Low priority, persistent icon in status bar)
-            NotificationChannel statusChannel = new NotificationChannel(
-                CHANNEL_ID_STATUS,
-                "Background Scanner Status",
-                NotificationManager.IMPORTANCE_LOW
-            );
-            statusChannel.setDescription("Shows that WhoseTab is monitoring in background");
-            statusChannel.setShowBadge(false);
-            nm.createNotificationChannel(statusChannel);
         }
     }
 }

@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">WhoseTab</string>
-    <string name="notification_channel_name">Paytm Expense Snapper</string>
-    <string name="notification_channel_desc">Alerts when a Paytm transaction is detected</string>
+    <string name="notification_channel_name">Payment Alerts</string>
+    <string name="notification_channel_desc">Alerts when a payment or repayment is detected</string>
 </resources>
