@@ -4,10 +4,12 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.ContactsContract;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -16,6 +18,8 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -37,6 +41,61 @@ public class MainActivity extends AppCompatActivity {
     private volatile boolean isWebPageLoaded = false;
     private float cutoutLeftDp = 0f;
     private float cutoutRightDp = 0f;
+    private String pendingContactPickTag = "";
+
+    private final ActivityResultLauncher<Intent> contactPickerLauncher =
+        registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() != RESULT_OK || result.getData() == null || result.getData().getData() == null) {
+                return;
+            }
+            Uri contactUri = result.getData().getData();
+            String pickedName = "";
+            String pickedPhone = "";
+            String[] projection = new String[] {
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER
+            };
+            try (Cursor cursor = getContentResolver().query(contactUri, projection, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int nameIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME);
+                    int numIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+                    if (nameIdx >= 0) pickedName = cursor.getString(nameIdx);
+                    if (numIdx >= 0) pickedPhone = cursor.getString(numIdx);
+                }
+            } catch (Exception ignored) {}
+
+            String cleanName = pickedName != null ? pickedName.trim() : "";
+            String rawPhone = pickedPhone != null ? pickedPhone.trim() : "";
+            String digits = rawPhone.replaceAll("[^0-9]", "");
+            if (digits.length() > 10 && digits.startsWith("91")) {
+                digits = digits.substring(digits.length() - 10);
+            }
+            String normalizedPhone = digits.length() >= 10 ? digits : rawPhone;
+            String tag = pendingContactPickTag != null ? pendingContactPickTag : "";
+            pendingContactPickTag = "";
+
+            if (webView != null && (!cleanName.isEmpty() || !normalizedPhone.isEmpty())) {
+                String js = String.format(
+                    "if(window.app && typeof window.app.onNativeContactPicked === 'function'){ window.app.onNativeContactPicked(%s, %s, %s); }",
+                    JSONObject.quote(cleanName),
+                    JSONObject.quote(normalizedPhone),
+                    JSONObject.quote(tag)
+                );
+                webView.post(() -> webView.evaluateJavascript(js, null));
+            }
+        });
+
+    public void launchPhoneContactPicker(String requestTag) {
+        runOnUiThread(() -> {
+            pendingContactPickTag = requestTag != null ? requestTag : "";
+            try {
+                Intent intent = new Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI);
+                contactPickerLauncher.launch(intent);
+            } catch (Exception e) {
+                android.util.Log.e("WhoseTab", "Unable to launch phone contact picker: " + e.getMessage());
+            }
+        });
+    }
 
     public static void notifyQuickExpensesUpdated() {
         MainActivity inst = activeInstance;
@@ -71,7 +130,6 @@ public class MainActivity extends AppCompatActivity {
             lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
             getWindow().setAttributes(lp);
         }
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         // Request POST_NOTIFICATIONS runtime permission on Android 13+ so background status bar icon is always visible
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -86,7 +144,6 @@ public class MainActivity extends AppCompatActivity {
         ScannerForegroundService.ensureRunning(this);
 
         webView = new WebView(this);
-        webView.setKeepScreenOn(true);
         webView.setBackgroundColor(Color.parseColor("#09090B"));
         setContentView(webView);
 
@@ -175,7 +232,13 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         isActivityForeground = true;
         activeInstance = this;
-        ScannerForegroundService.ensureRunning(this);
+        if (webView != null) {
+            webView.onResume();
+            webView.resumeTimers();
+        }
+        if (!ScannerForegroundService.isRunning()) {
+            ScannerForegroundService.ensureRunning(this);
+        }
 
         if (webView != null) {
             webView.post(() -> {
@@ -207,8 +270,12 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
-        super.onPause();
         isActivityForeground = false;
+        if (webView != null) {
+            webView.onPause();
+            webView.pauseTimers();
+        }
+        super.onPause();
     }
 
     @Override
@@ -244,11 +311,13 @@ public class MainActivity extends AppCompatActivity {
         if (intent != null && intent.hasExtra("paytm_type") && "repayment".equals(intent.getStringExtra("paytm_type"))) {
             double rAmount = intent.getDoubleExtra("paytm_amount", 0.0);
             String rSender = intent.getStringExtra("paytm_sender");
+            String rHandle = intent.getStringExtra("paytm_handle");
             String rNote = intent.getStringExtra("paytm_note");
             long rPostTime = intent.getLongExtra("paytm_postTime", 0L);
             intent.removeExtra("paytm_type");
             intent.removeExtra("paytm_amount");
             intent.removeExtra("paytm_sender");
+            intent.removeExtra("paytm_handle");
             intent.removeExtra("paytm_note");
             intent.removeExtra("paytm_postTime");
 
@@ -258,6 +327,7 @@ public class MainActivity extends AppCompatActivity {
                     rObj.put("type", "repayment");
                     rObj.put("amount", rAmount);
                     rObj.put("sender", rSender != null ? rSender : "Someone");
+                    rObj.put("counterpartyHandle", rHandle != null ? rHandle : "");
                     rObj.put("note", rNote != null ? rNote : "");
                     rObj.put("postTime", rPostTime);
                     rObj.put("timestamp", System.currentTimeMillis());
@@ -278,6 +348,7 @@ public class MainActivity extends AppCompatActivity {
 
         double amount = 0.0;
         String recipient = "";
+        String handle = "";
         String note = "";
         String category = "General";
         String txnId = "";
@@ -287,6 +358,7 @@ public class MainActivity extends AppCompatActivity {
         if (intent != null && intent.hasExtra("paytm_amount")) {
             amount = intent.getDoubleExtra("paytm_amount", 0.0);
             recipient = intent.getStringExtra("paytm_recipient");
+            handle = intent.getStringExtra("paytm_handle");
             note = intent.getStringExtra("paytm_note");
             category = intent.getStringExtra("paytm_category");
             txnId = intent.getStringExtra("paytm_txnId");
@@ -294,6 +366,7 @@ public class MainActivity extends AppCompatActivity {
 
             intent.removeExtra("paytm_amount");
             intent.removeExtra("paytm_recipient");
+            intent.removeExtra("paytm_handle");
             intent.removeExtra("paytm_note");
             intent.removeExtra("paytm_category");
             intent.removeExtra("paytm_txnId");
@@ -319,6 +392,7 @@ public class MainActivity extends AppCompatActivity {
                 if (parsed != null) {
                     amount = parsed.optDouble("amount", 0.0);
                     recipient = parsed.optString("recipient", "Merchant");
+                    handle = parsed.optString("counterpartyHandle", "");
                     note = parsed.optString("rawText", "");
                     category = parsed.optString("suggestedCategory", "General");
                     txnId = parsed.optString("txnId", "");
@@ -333,6 +407,7 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject paymentObj = new JSONObject();
                 paymentObj.put("amount", amount);
                 paymentObj.put("recipient", recipient != null && !recipient.isEmpty() ? recipient : "Merchant");
+                paymentObj.put("counterpartyHandle", handle != null ? handle : "");
                 paymentObj.put("note", note != null ? note : "");
                 paymentObj.put("suggestedCategory", category != null ? category : "General");
                 paymentObj.put("txnId", txnId != null ? txnId : "");

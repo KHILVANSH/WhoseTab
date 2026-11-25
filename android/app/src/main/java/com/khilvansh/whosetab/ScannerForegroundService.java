@@ -23,9 +23,24 @@ public class ScannerForegroundService extends Service {
     public static final String CHANNEL_ID_STATUS = "paytm_scanner_status";
     public static final int STATUS_NOTIFICATION_ID = 1001;
     public static final String ACTION_REFRESH_STATUS = "com.khilvansh.whosetab.REFRESH_STATUS";
+    private static volatile boolean serviceRunning = false;
+    private static volatile Boolean lastNotifAccessState = null;
+
+    public static boolean isRunning() {
+        return serviceRunning;
+    }
 
     public static void ensureRunning(Context context) {
         if (context == null) return;
+        boolean hasAccess = false;
+        try {
+            hasAccess = NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.getPackageName());
+        } catch (Exception ignored) {}
+
+        // Avoid redundant startForegroundService IPC and notification rebuilds when state hasn't changed
+        if (serviceRunning && lastNotifAccessState != null && lastNotifAccessState == hasAccess) {
+            return;
+        }
         try {
             Intent intent = new Intent(context, ScannerForegroundService.class);
             intent.setAction(ACTION_REFRESH_STATUS);
@@ -38,27 +53,32 @@ public class ScannerForegroundService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        serviceRunning = true;
         createStatusChannel();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         createStatusChannel();
-        Notification notification = buildStatusNotification();
+        boolean hasAccess = NotificationManagerCompat.getEnabledListenerPackages(this).contains(getPackageName());
 
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(STATUS_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-            } else {
-                startForeground(STATUS_NOTIFICATION_ID, notification);
+        if (!serviceRunning || lastNotifAccessState == null || lastNotifAccessState != hasAccess) {
+            lastNotifAccessState = hasAccess;
+            Notification notification = buildStatusNotification(hasAccess);
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    startForeground(STATUS_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+                } else {
+                    startForeground(STATUS_NOTIFICATION_ID, notification);
+                }
+                serviceRunning = true;
+            } catch (Exception e) {
+                Log.e(TAG, "startForeground failed: " + e.getMessage());
             }
-        } catch (Exception e) {
-            Log.e(TAG, "startForeground failed: " + e.getMessage());
         }
 
         // Request Android to bind NotificationListenerService if granted but disconnected
         try {
-            boolean hasAccess = NotificationManagerCompat.getEnabledListenerPackages(this).contains(getPackageName());
             if (hasAccess && !PaytmNotificationListenerService.isRunning() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 NotificationListenerService.requestRebind(new ComponentName(this, PaytmNotificationListenerService.class));
             }
@@ -69,8 +89,14 @@ public class ScannerForegroundService extends Service {
         return START_STICKY;
     }
 
-    private Notification buildStatusNotification() {
-        boolean hasAccess = NotificationManagerCompat.getEnabledListenerPackages(this).contains(getPackageName());
+    @Override
+    public void onDestroy() {
+        serviceRunning = false;
+        lastNotifAccessState = null;
+        super.onDestroy();
+    }
+
+    private Notification buildStatusNotification(boolean hasAccess) {
 
         Intent openAppIntent = new Intent(this, MainActivity.class);
         openAppIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);

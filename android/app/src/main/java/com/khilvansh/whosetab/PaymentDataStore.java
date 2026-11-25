@@ -20,6 +20,7 @@ public class PaymentDataStore {
 
     private static final String KEY_SYNCED_CONTACTS = "synced_contacts_json";
     private static final String KEY_QUEUED_QUICK_EXPENSES = "queued_quick_expenses_json";
+    private static final String KEY_RECENT_DETECTIONS = "recent_detected_events_json";
     public static final String KEY_DETECTION_MODE = "payment_detection_mode"; // "overlay" | "open_app" | "notification"
 
     /**
@@ -296,5 +297,67 @@ public class PaymentDataStore {
         if (context == null || mode == null) return;
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit().putString(KEY_DETECTION_MODE, mode).apply();
+    }
+
+    // ================= RECENT DETECTED PAYMENTS RING BUFFER =================
+    public static synchronized void addRecentDetection(Context context, JSONObject detection) {
+        if (context == null || detection == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String raw = prefs.getString(KEY_RECENT_DETECTIONS, "[]");
+        try {
+            JSONArray existing = new JSONArray(raw);
+            boolean isRepay = "repayment".equals(detection.optString("type"));
+            String newSig = isRepay ? getRepaymentSignature(detection) : getSignature(detection);
+
+            JSONArray updated = new JSONArray();
+            JSONObject copy = new JSONObject(detection.toString());
+            if (!copy.has("sig")) copy.put("sig", newSig);
+            if (!copy.has("timestamp")) copy.put("timestamp", System.currentTimeMillis());
+            updated.put(copy);
+
+            for (int i = 0; i < existing.length() && updated.length() < 15; i++) {
+                JSONObject item = existing.optJSONObject(i);
+                if (item == null) continue;
+                String itemSig = item.optString("sig", "");
+                if (!newSig.isEmpty() && newSig.equals(itemSig)) continue;
+                updated.put(item);
+            }
+            prefs.edit().putString(KEY_RECENT_DETECTIONS, updated.toString()).apply();
+        } catch (Exception ignored) {}
+    }
+
+    public static synchronized JSONArray getRecentDetections(Context context) {
+        if (context == null) return new JSONArray();
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String raw = prefs.getString(KEY_RECENT_DETECTIONS, "[]");
+        try {
+            return new JSONArray(raw);
+        } catch (Exception e) {
+            return new JSONArray();
+        }
+    }
+
+    public static synchronized void clearRecentDetections(Context context) {
+        if (context == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putString(KEY_RECENT_DETECTIONS, "[]").apply();
+    }
+
+    /**
+     * Purges queued/pending payment caches when resetting or upgrading entries.
+     */
+    public static synchronized void purgeStaleState(Context context) {
+        inMemoryPayment = null;
+        inMemoryRepayment = null;
+        if (context == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit()
+            .remove(KEY_PENDING_PAYMENT)
+            .remove(KEY_PENDING_REPAYMENT)
+            .remove(KEY_DISMISSED_PAYMENTS)
+            .remove(KEY_DISMISSED_REPAYMENTS)
+            .putString(KEY_QUEUED_QUICK_EXPENSES, "[]")
+            .putString(KEY_RECENT_DETECTIONS, "[]")
+            .apply();
     }
 }

@@ -49,6 +49,67 @@ public class WebAppInterface {
         return arr != null ? arr.toString() : "[]";
     }
 
+    @JavascriptInterface
+    public void pickPhoneContact(String requestTag) {
+        if (activity instanceof MainActivity) {
+            ((MainActivity) activity).launchPhoneContactPicker(requestTag);
+        }
+    }
+
+    @JavascriptInterface
+    public String getRecentDetections() {
+        JSONArray arr = PaymentDataStore.getRecentDetections(activity);
+        return arr != null ? arr.toString() : "[]";
+    }
+
+    @JavascriptInterface
+    public void clearRecentDetections() {
+        PaymentDataStore.clearRecentDetections(activity);
+    }
+
+    @JavascriptInterface
+    public void clearStalePaymentCache() {
+        PaymentDataStore.purgeStaleState(activity);
+    }
+
+    @JavascriptInterface
+    public void shareText(String text, String title) {
+        if (text == null || text.trim().isEmpty()) return;
+        activity.runOnUiThread(() -> {
+            try {
+                Intent share = new Intent(Intent.ACTION_SEND);
+                share.setType("text/plain");
+                share.putExtra(Intent.EXTRA_TEXT, text);
+                activity.startActivity(Intent.createChooser(share, title != null ? title : "Share Balance"));
+            } catch (Exception e) {
+                Toast.makeText(activity, "Could not open share dialog", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void openUpiPayApp(String upiId, String name, String amountStr) {
+        if (upiId == null || upiId.trim().isEmpty()) {
+            activity.runOnUiThread(() -> Toast.makeText(activity, "Add contact UPI ID first", Toast.LENGTH_SHORT).show());
+            return;
+        }
+        activity.runOnUiThread(() -> {
+            try {
+                Uri uri = Uri.parse("upi://pay")
+                    .buildUpon()
+                    .appendQueryParameter("pa", upiId.trim())
+                    .appendQueryParameter("pn", name != null ? name.trim() : "Contact")
+                    .appendQueryParameter("am", amountStr != null ? amountStr.trim() : "")
+                    .appendQueryParameter("cu", "INR")
+                    .build();
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                activity.startActivity(Intent.createChooser(intent, "Pay with UPI"));
+            } catch (Exception e) {
+                Toast.makeText(activity, "No UPI app available on device", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
     // --- PAYMENT DETECTION MODE & TEST OVERLAY ---
     @JavascriptInterface
     public String getDetectionMode() {

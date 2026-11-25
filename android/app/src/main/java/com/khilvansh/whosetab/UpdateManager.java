@@ -23,6 +23,8 @@ import org.json.JSONObject;
 public class UpdateManager {
 
     public static final String GITHUB_REPO_API = "https://api.github.com/repos/KHILVANSH/WhoseTab/releases/latest";
+    private static final String KEY_LAST_SILENT_CHECK = "last_silent_update_check_ms";
+    private static final long SILENT_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L;
 
     public interface UpdateCheckCallback {
         void onUpdateFound(String latestVersion, String apkUrl, String releaseNotes);
@@ -33,13 +35,21 @@ public class UpdateManager {
     public static String getCurrentVersion(Context context) {
         try {
             PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
-            return pInfo.versionName != null ? pInfo.versionName : "1.1.1";
+            return pInfo.versionName != null ? pInfo.versionName : "1.2.0";
         } catch (Exception e) {
-            return "1.1.1";
+            return "1.2.0";
         }
     }
 
     public static void checkSilentlyOnLaunch(Context context) {
+        if (context == null) return;
+        android.content.SharedPreferences prefs = context.getSharedPreferences(PaymentDataStore.PREFS_NAME, Context.MODE_PRIVATE);
+        long lastCheck = prefs.getLong(KEY_LAST_SILENT_CHECK, 0L);
+        long now = System.currentTimeMillis();
+        if (now - lastCheck < SILENT_CHECK_INTERVAL_MS) {
+            return;
+        }
+        prefs.edit().putLong(KEY_LAST_SILENT_CHECK, now).apply();
         new Thread(() -> {
             try {
                 checkForUpdates(context, new UpdateCheckCallback() {

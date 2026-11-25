@@ -54,6 +54,7 @@ public class QuickAddCardBinder {
         String counterparty = isRepayment
             ? data.optString("sender", "Someone")
             : data.optString("recipient", "Merchant").replaceAll("\\s+", " ").trim();
+        String counterpartyHandle = data.optString("counterpartyHandle", "");
 
         TextView titleTv = root.findViewById(R.id.overlayTitle);
         TextView subtitleTv = root.findViewById(R.id.overlaySubtitle);
@@ -63,6 +64,15 @@ public class QuickAddCardBinder {
         TextView includeMeChip = root.findViewById(R.id.overlayIncludeMeChip);
         TextView openAppBtn = root.findViewById(R.id.overlayOpenAppBtn);
         TextView quickAddBtn = root.findViewById(R.id.overlayQuickAddBtn);
+
+        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {}
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+                timerHandler.removeCallbacksAndMessages(null);
+            }
+        });
 
         if (isRepayment) {
             titleTv.setText(String.format(Locale.US, "Received ₹%.2f", amount));
@@ -83,7 +93,7 @@ public class QuickAddCardBinder {
 
         if (!isRepayment) {
             JSONArray synced = PaymentDataStore.getSyncedContacts(context);
-            String matchedId = findBestContactMatch(synced, counterparty);
+            String matchedId = findBestContactMatch(synced, counterparty, counterpartyHandle);
             if (synced.length() == 0) {
                 contactsContainer.setVisibility(View.GONE);
                 quickAddBtn.setText("Split in App");
@@ -219,6 +229,9 @@ public class QuickAddCardBinder {
                 JSONObject expenseObj = new JSONObject();
                 expenseObj.put("id", "e_" + System.currentTimeMillis());
                 expenseObj.put("title", counterparty);
+                expenseObj.put("counterpartyName", counterparty);
+                expenseObj.put("counterpartyHandle", counterpartyHandle);
+                expenseObj.put("entryKind", includeMe[0] ? "split" : "lent");
                 expenseObj.put("totalAmount", amount);
                 expenseObj.put("paidById", "me");
                 expenseObj.put("splitType", includeMe[0] ? "EqualSplit" : "BoughtForPerson");
@@ -266,9 +279,78 @@ public class QuickAddCardBinder {
         });
     }
 
-    private static String findBestContactMatch(JSONArray contacts, String rawCounterparty) {
-        if (contacts == null || rawCounterparty == null || rawCounterparty.isEmpty()) return null;
-        String cleanCp = rawCounterparty.toLowerCase().replaceAll("[^a-z0-9]", "");
+    private static String findBestContactMatch(JSONArray contacts, String rawCounterparty, String rawHandle) {
+        if (contacts == null || contacts.length() == 0) return null;
+        String cp = rawCounterparty != null ? rawCounterparty.trim() : "";
+        String handle = rawHandle != null ? rawHandle.trim() : "";
+        String combinedRaw = (cp + " " + handle).trim().toLowerCase();
+        String combinedDigits = combinedRaw.replaceAll("[^0-9]", "");
+
+        // 1. Exact phone 10-digit suffix match
+        if (combinedDigits.length() >= 10) {
+            String last10 = combinedDigits.substring(combinedDigits.length() - 10);
+            for (int i = 0; i < contacts.length(); i++) {
+                JSONObject c = contacts.optJSONObject(i);
+                if (c == null) continue;
+                String phoneDigits = c.optString("phone", "").replaceAll("[^0-9]", "");
+                if (phoneDigits.length() >= 10 && phoneDigits.endsWith(last10)) {
+                    return c.optString("id", "");
+                }
+            }
+        }
+
+        // 2. Masked VPA suffix match (e.g. *7113@wahdfcbank -> phone ends with 7113 if unique)
+        if (handle.startsWith("*") || combinedRaw.contains("@")) {
+            java.util.regex.Matcher m4 = java.util.regex.Pattern.compile("\\*?([0-9]{4})@").matcher(combinedRaw);
+            if (m4.find()) {
+                String tail4 = m4.group(1);
+                String uniqueMatchId = null;
+                int matches = 0;
+                for (int i = 0; i < contacts.length(); i++) {
+                    JSONObject c = contacts.optJSONObject(i);
+                    if (c == null) continue;
+                    String phoneDigits = c.optString("phone", "").replaceAll("[^0-9]", "");
+                    if (phoneDigits.endsWith(tail4)) {
+                        uniqueMatchId = c.optString("id", "");
+                        matches++;
+                    }
+                }
+                if (matches == 1) return uniqueMatchId;
+            }
+        }
+
+        // 3. UPI ID match
+        for (int i = 0; i < contacts.length(); i++) {
+            JSONObject c = contacts.optJSONObject(i);
+            if (c == null) continue;
+            String upi = c.optString("upi", "").toLowerCase().trim();
+            if (!upi.isEmpty() && (combinedRaw.contains(upi) || (!handle.isEmpty() && upi.contains(handle.toLowerCase())))) {
+                return c.optString("id", "");
+            }
+        }
+
+        String cleanCp = cp.toLowerCase().replaceAll("[^a-z0-9]", "");
+        String cleanHandle = handle.toLowerCase().replaceAll("[^a-z0-9]", "");
+
+        // 4. Learned payment aliases match
+        for (int i = 0; i < contacts.length(); i++) {
+            JSONObject c = contacts.optJSONObject(i);
+            if (c == null) continue;
+            JSONArray aliases = c.optJSONArray("aliases");
+            if (aliases == null) continue;
+            for (int j = 0; j < aliases.length(); j++) {
+                String alias = aliases.optString(j, "").trim().toLowerCase();
+                if (alias.isEmpty()) continue;
+                String cleanAlias = alias.replaceAll("[^a-z0-9]", "");
+                if (!cleanAlias.isEmpty() && (cleanAlias.equals(cleanCp) || cleanAlias.equals(cleanHandle)
+                        || (cleanCp.length() >= 3 && cleanCp.contains(cleanAlias))
+                        || combinedRaw.contains(alias))) {
+                    return c.optString("id", "");
+                }
+            }
+        }
+
+        // 5. Name / First name / Phonetic match
         if (cleanCp.length() < 3) return null;
         String phoneticCp = cleanCp.replace("h", "");
 
@@ -332,11 +414,13 @@ public class QuickAddCardBinder {
             openIntent.putExtra("paytm_type", "repayment");
             openIntent.putExtra("paytm_amount", data.optDouble("amount", 0.0));
             openIntent.putExtra("paytm_sender", data.optString("sender", "Someone"));
+            openIntent.putExtra("paytm_handle", data.optString("counterpartyHandle", ""));
             openIntent.putExtra("paytm_note", data.optString("rawText", ""));
             openIntent.putExtra("paytm_postTime", data.optLong("postTime", 0L));
         } else {
             openIntent.putExtra("paytm_amount", data.optDouble("amount", 0.0));
             openIntent.putExtra("paytm_recipient", data.optString("recipient", "Merchant"));
+            openIntent.putExtra("paytm_handle", data.optString("counterpartyHandle", ""));
             openIntent.putExtra("paytm_txnId", data.optString("txnId", ""));
             openIntent.putExtra("paytm_category", data.optString("suggestedCategory", "General"));
             openIntent.putExtra("paytm_note", data.optString("rawText", ""));

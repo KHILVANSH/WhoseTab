@@ -35,8 +35,7 @@
           <span id="scannerStatusText">Listening</span>
         </button>
 
-        <button type="button" id="openSnapModalBtn" class="icon-action-btn" aria-label="Add Expense"
-          title="Add Expense">
+        <button type="button" id="openSnapModalBtn" class="icon-action-btn" aria-label="New Entry" title="New Entry">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
             stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -56,6 +55,14 @@
           </button>
 
           <div id="headerOverflowMenu" class="popover-menu hidden" role="menu">
+            <button type="button" class="menu-item" id="menuRecentDetections" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span>Recent Payments</span>
+            </button>
             <button type="button" class="menu-item" id="menuAddContact" role="menuitem">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -124,7 +131,7 @@
             <div class="balance-hero-card">
               <div class="hero-top">
                 <div>
-                  <span class="hero-eyebrow">Net Owed to You</span>
+                  <span class="hero-eyebrow" id="heroBalanceLabel">Net Balance</span>
                   <div class="hero-amount tabular" id="totalOwedToMe">₹0.00</div>
                 </div>
                 <button type="button" id="heroAddBtn" class="btn-pill-primary">
@@ -133,11 +140,13 @@
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                   </svg>
-                  <span>Expense</span>
+                  <span>Entry</span>
                 </button>
               </div>
               <div class="hero-footer">
-                <span class="hero-meta" id="activeDebtorsCount">0 active balances</span>
+                <span class="hero-meta" id="heroCollectSummary">Collect ₹0.00</span>
+                <span class="hero-meta-dot" aria-hidden="true">•</span>
+                <span class="hero-meta" id="heroOweSummary">Owe ₹0.00</span>
                 <span class="hero-meta-dot" aria-hidden="true">•</span>
                 <span class="hero-meta" id="heroExpenseCount">0 entries</span>
               </div>
@@ -161,7 +170,7 @@
           </div>
 
           <div class="dashboard-right">
-            <!-- Section: Recent Activity (Expenses & Repayments) -->
+            <!-- Section: Recent Activity (Splits, Lent, Borrowed, Settlements) -->
             <div class="section-bar mt-6 activity-bar">
               <div class="section-title-group">
                 <h2 class="section-title">Activity</h2>
@@ -169,8 +178,9 @@
               </div>
               <div class="segmented-mini" role="tablist">
                 <button type="button" class="seg-mini-btn active" data-act-filter="all">All</button>
-                <button type="button" class="seg-mini-btn" data-act-filter="expense">Spent</button>
-                <button type="button" class="seg-mini-btn" data-act-filter="repayment">Repaid</button>
+                <button type="button" class="seg-mini-btn" data-act-filter="lent">Lent</button>
+                <button type="button" class="seg-mini-btn" data-act-filter="borrowed">Owe</button>
+                <button type="button" class="seg-mini-btn" data-act-filter="repayment">Settled</button>
               </div>
             </div>
 
@@ -185,14 +195,23 @@
       <section id="viewPeople" class="tab-view">
         <div class="section-bar">
           <h2 class="section-title">People</h2>
-          <button type="button" id="addPersonPageBtn" class="btn-pill-subtle">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            <span>New Contact</span>
-          </button>
+          <div class="people-header-actions">
+            <button type="button" id="pickPhonePersonPageBtn" class="btn-pill-subtle">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+              </svg>
+              <span>From Phone</span>
+            </button>
+            <button type="button" id="addPersonPageBtn" class="btn-pill-subtle">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>New Contact</span>
+            </button>
+          </div>
         </div>
 
         <div class="people-toolbar">
@@ -202,7 +221,7 @@
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input type="search" id="peopleSearchInput" class="search-input" placeholder="Search by name, phone, or UPI">
+            <input type="search" id="peopleSearchInput" class="search-input" placeholder="Search by name, phone, UPI, or alias">
           </div>
 
           <div class="filter-strip">
@@ -272,7 +291,7 @@
               <div class="settings-row" id="settingsItemNotif">
                 <div class="settings-row-info">
                   <span class="row-title">Notification Access</span>
-                  <span class="row-subtitle">Read Paytm &amp; bank SMS alerts</span>
+                  <span class="row-subtitle">Event-driven payment &amp; SMS reader</span>
                 </div>
                 <button type="button" id="grantNotificationAccessBtn" class="btn-status-action">Enable</button>
               </div>
@@ -280,7 +299,7 @@
               <div class="settings-row" id="settingsItemPostNotif">
                 <div class="settings-row-info">
                   <span class="row-title">Status Bar Icon &amp; Alerts</span>
-                  <span class="row-subtitle">Shows persistent background indicator</span>
+                  <span class="row-subtitle">Lightweight indicator (no periodic polling)</span>
                 </div>
                 <button type="button" id="grantPostNotifBtn" class="btn-status-action">Allow</button>
               </div>
@@ -296,7 +315,7 @@
               <div class="settings-row" id="settingsItemBattery">
                 <div class="settings-row-info">
                   <span class="row-title">Unrestricted Battery</span>
-                  <span class="row-subtitle">Keep listener active in background</span>
+                  <span class="row-subtitle">Prevent system from killing background listener</span>
                 </div>
                 <button type="button" id="grantBatteryAccessBtn" class="btn-status-action">Allow</button>
               </div>
@@ -331,7 +350,7 @@
             <div class="grouped-list settings-group">
               <div class="settings-row">
                 <div class="settings-row-info">
-                  <span class="row-title">Version <span id="appVersionDisplay" class="text-muted">v1.1.1</span></span>
+                  <span class="row-title">Version <span id="appVersionDisplay" class="text-muted">v1.2.0</span></span>
                   <span class="row-subtitle" id="updateStatusNotice">Stored locally on device</span>
                 </div>
                 <button type="button" id="checkForUpdatesBtn" class="btn-status-action">Check</button>
@@ -354,8 +373,20 @@
               </button>
               <input type="file" id="importFileInput" accept=".json" style="display: none;">
 
+              <button type="button" id="clearEntriesOnlyBtn" class="settings-row interactive-row">
+                <div class="settings-row-info">
+                  <span class="row-title">Purge All Entries</span>
+                  <span class="row-subtitle">Clears balances &amp; activity while keeping contacts</span>
+                </div>
+                <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                </svg>
+              </button>
+
               <button type="button" id="clearDataBtn" class="settings-row interactive-row danger-row">
-                <span class="row-title text-danger">Reset Ledger Data</span>
+                <span class="row-title text-danger">Reset All Data</span>
                 <svg class="row-chevron text-danger" width="18" height="18" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="3 6 5 6 21 6"></polyline>
@@ -369,7 +400,7 @@
 
     </main>
 
-    <!-- Bottom-Right In-App Quick-Add Toast (Clipboard / Background Payment Preview) -->
+    <!-- Bottom-Right In-App Quick-Add Toast -->
     <aside id="inAppQuickToast" class="quick-toast-card hidden" role="status" aria-live="polite">
       <div class="qt-header">
         <div class="qt-title-block">
@@ -380,7 +411,7 @@
       </div>
       <div id="qtContactsRow" class="qt-chips-scroll"></div>
       <div class="qt-actions">
-        <button type="button" id="qtSecondaryBtn" class="qt-btn qt-btn-secondary">Split</button>
+        <button type="button" id="qtSecondaryBtn" class="qt-btn qt-btn-secondary">Edit</button>
         <button type="button" id="qtPrimaryBtn" class="qt-btn qt-btn-primary">Quick Add</button>
       </div>
     </aside>
@@ -436,8 +467,7 @@
         </div>
 
         <p class="sheet-desc">
-          Enable these permissions so WhoseTab stays active in the background and shows the quick-add popup on Paytm
-          payments.
+          Grant these permissions so WhoseTab reads payment notifications with minimal battery overhead and shows quick-add prompts.
         </p>
 
         <div class="grouped-list mt-3">
@@ -460,7 +490,7 @@
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="row-title">Display Over Other Apps</span>
-              <span class="row-subtitle">Shows bottom-right popup toast</span>
+              <span class="row-subtitle">Shows bottom-right popup over Paytm</span>
             </div>
             <button type="button" id="setupGrantOverlayBtn" class="btn-status-action">Enable</button>
           </div>
@@ -482,6 +512,27 @@
       </div>
     </div>
 
+    <!-- SHEET: RECENT DETECTED PAYMENTS -->
+    <div id="recentDetectionsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-sheet">
+        <div class="sheet-handle"></div>
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow-tag">Detected Inbox</span>
+            <h3 class="sheet-title mt-1">Recent Payments</h3>
+          </div>
+          <button type="button" id="closeRecentDetectionsBtn" class="btn-close" aria-label="Close">✕</button>
+        </div>
+
+        <div id="recentDetectionsList" class="grouped-list mt-2"></div>
+
+        <div class="sheet-actions flex gap-2 mt-4">
+          <button type="button" id="clearRecentDetectionsBtn" class="btn btn-secondary flex-1">Clear History</button>
+          <button type="button" id="doneRecentDetectionsBtn" class="btn btn-primary flex-1">Done</button>
+        </div>
+      </div>
+    </div>
+
     <!-- SHEET: CONTACT ACTION MENU -->
     <div id="personActionsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet action-sheet">
@@ -494,13 +545,34 @@
           <div class="action-person-bal tabular" id="actionPersonBalance">₹0.00</div>
         </div>
 
+        <div id="actionPersonHistoryWrap" class="mt-3 hidden">
+          <div class="text-xs text-muted uppercase-label mb-1">Recent with contact</div>
+          <div id="actionPersonHistory" class="grouped-list"></div>
+        </div>
+
         <div class="grouped-list mt-3">
           <button type="button" id="actionSplitBtn" class="settings-row interactive-row">
-            <span class="row-title">Add Expense</span>
+            <span class="row-title">Split Expense (I Paid)</span>
             <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+          <button type="button" id="actionLentBtn" class="settings-row interactive-row">
+            <span class="row-title">Record Lent (They Owe)</span>
+            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="7" y1="17" x2="17" y2="7"></line>
+              <polyline points="7 7 17 7 17 17"></polyline>
+            </svg>
+          </button>
+          <button type="button" id="actionBorrowBtn" class="settings-row interactive-row">
+            <span class="row-title text-danger">Record Borrowed (I Owe)</span>
+            <svg class="row-chevron text-danger" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="17" y1="7" x2="7" y2="17"></line>
+              <polyline points="17 17 7 17 7 7"></polyline>
             </svg>
           </button>
           <button type="button" id="actionSettleBtn" class="settings-row interactive-row">
@@ -508,6 +580,25 @@
             <svg class="row-chevron text-success" width="18" height="18" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </button>
+          <button type="button" id="actionPayUpiBtn" class="settings-row interactive-row hidden">
+            <span class="row-title text-accent" id="actionPayUpiLabel">Pay via UPI</span>
+            <svg class="row-chevron text-accent" width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+              <line x1="2" y1="10" x2="22" y2="10"></line>
+            </svg>
+          </button>
+          <button type="button" id="actionShareSummaryBtn" class="settings-row interactive-row">
+            <span class="row-title">Share Balance Summary</span>
+            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
             </svg>
           </button>
           <button type="button" id="actionEditPersonBtn" class="settings-row interactive-row">
@@ -530,7 +621,7 @@
         <div class="sheet-handle"></div>
         <div class="modal-header">
           <div>
-            <span class="eyebrow-tag" id="detailTypeBadge">Expense</span>
+            <span class="eyebrow-tag" id="detailTypeBadge">Entry</span>
             <h3 class="sheet-title mt-1" id="detailTitle">Merchant</h3>
           </div>
           <button type="button" id="closeActivityDetailBtn" class="btn-close" aria-label="Close">✕</button>
@@ -539,7 +630,8 @@
         <div class="detail-amount-hero tabular" id="detailAmount">₹0.00</div>
         <div class="text-xs text-muted" id="detailTimestamp">Today</div>
 
-        <div id="detailSplitsContainer" class="grouped-list mt-4"></div>
+        <div id="detailMetaCard" class="grouped-list mt-3 hidden"></div>
+        <div id="detailSplitsContainer" class="grouped-list mt-3"></div>
 
         <div class="sheet-actions flex gap-2 mt-4">
           <button type="button" id="deleteActivityEntryBtn" class="btn btn-danger-ghost flex-1">Delete Entry</button>
@@ -548,17 +640,39 @@
       </div>
     </div>
 
-    <!-- SHEET: ADD / LOG EXPENSE -->
+    <!-- SHEET: ADD / LOG ENTRY (SPLIT, LENT, BORROWED) -->
     <div id="snapExpenseModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet modal-sheet-wide">
         <div class="sheet-handle"></div>
         <div class="modal-header">
-          <h3 class="sheet-title" id="modalTitle">New Expense</h3>
+          <h3 class="sheet-title" id="modalTitle">New Entry</h3>
           <button type="button" id="closeSnapModalBtn" class="btn-close" aria-label="Close">✕</button>
         </div>
 
         <form id="snapExpenseForm" novalidate>
           <div id="snapFormError" class="form-error-banner hidden" role="alert"></div>
+
+          <!-- Entry Kind Switcher: Split / Lent / Borrowed -->
+          <div class="segmented-bar entry-mode-bar" id="entryKindBar" role="tablist">
+            <button type="button" class="seg-option active" data-kind="split">Split</button>
+            <button type="button" class="seg-option" data-kind="lent">Lent</button>
+            <button type="button" class="seg-option" data-kind="borrowed">Borrowed</button>
+          </div>
+
+          <!-- Scanned Payment Name Link Banner -->
+          <div id="paymentLinkBanner" class="payment-link-banner hidden">
+            <div class="plb-top">
+              <div class="plb-info">
+                <span class="plb-tag" id="paymentLinkSourceTag">Scanned Payment</span>
+                <span class="plb-name" id="paymentLinkName">—</span>
+              </div>
+              <button type="button" id="paymentLinkCreateBtn" class="btn-inline-chip">+ Save Contact</button>
+            </div>
+            <label class="plb-check-row hidden" id="paymentSaveAliasRow">
+              <input type="checkbox" id="paymentSaveAliasCheck">
+              <span id="paymentSaveAliasText">Remember this payment name for selected contact</span>
+            </label>
+          </div>
 
           <div class="snap-form-grid">
             <div class="snap-col-left">
@@ -570,11 +684,11 @@
               </div>
 
               <div class="form-group mt-3">
-                <input type="text" id="snapTitle" class="form-input" placeholder="Description (e.g. Tea Stall, Groceries)">
+                <input type="text" id="snapTitle" class="form-input" placeholder="Description or payment name">
               </div>
 
               <!-- Single-line Scrollable Category Strip -->
-              <div class="form-group">
+              <div class="form-group" id="snapCategoryGroup">
                 <div class="category-strip">
                   <label class="cat-pill"><input type="radio" name="category" value="General"
                       checked><span>General</span></label>
@@ -591,24 +705,25 @@
             </div>
 
             <div class="snap-col-right">
-              <!-- Split People Selector -->
+              <!-- Contact / Number Selector -->
               <div class="form-group" id="peopleSelectSection">
                 <div class="label-row">
-                  <label class="form-label">Split between</label>
+                  <label class="form-label" id="snapPeopleLabel">Split between</label>
                   <div class="people-actions-row">
+                    <button type="button" class="btn-link-xs" id="pickPhoneEntryBtn">From Phone</button>
                     <button type="button" class="btn-link-xs" id="selectAllPeopleBtn">Select All</button>
                     <button type="button" class="btn-link-xs" id="clearAllPeopleBtn">Clear</button>
                   </div>
                 </div>
                 <div id="modalPeopleChips" class="people-chips-grid"></div>
-                <div id="selectedPeopleSummary" class="text-xs text-muted mt-1">Select contacts</div>
+                <div id="selectedPeopleSummary" class="text-xs text-muted mt-1">Select contacts or pick from phone</div>
               </div>
 
-              <!-- Your Share Bar -->
-              <div class="form-group">
+              <!-- Your Share / Borrowed Portion Bar -->
+              <div class="form-group" id="myShareSection">
                 <div class="label-row">
-                  <label for="snapMyShare" class="form-label">Your share</label>
-                  <div class="segmented-mini">
+                  <label for="snapMyShare" class="form-label" id="myShareLabel">Your share</label>
+                  <div class="segmented-mini" id="mySharePresets">
                     <button type="button" class="seg-mini-btn active" id="preset100ThemBtn">None for me</button>
                     <button type="button" class="seg-mini-btn" id="presetSplitEvenBtn">Split equally</button>
                   </div>
@@ -624,7 +739,7 @@
               <!-- Breakdown Table -->
               <div id="splitBreakdownCard" class="breakdown-panel">
                 <div class="breakdown-header">
-                  <span class="text-xs text-muted uppercase-label">Breakdown</span>
+                  <span class="text-xs text-muted uppercase-label" id="breakdownHeaderLabel">Breakdown</span>
                   <span id="summaryFriendsTotal" class="breakdown-total tabular">₹0.00 to collect</span>
                 </div>
                 <div id="summaryBreakdownList" class="breakdown-rows"></div>
@@ -633,7 +748,7 @@
           </div>
 
           <div class="modal-footer mt-4">
-            <button type="submit" class="btn btn-primary btn-block btn-lg" id="submitSnapBtn">Save Expense</button>
+            <button type="submit" class="btn btn-primary btn-block btn-lg" id="submitSnapBtn">Save Entry</button>
           </div>
         </form>
       </div>
@@ -645,7 +760,10 @@
         <div class="sheet-handle"></div>
         <div class="modal-header">
           <h3 class="sheet-title">Add Contact</h3>
-          <button type="button" id="closeAddPersonModalBtn" class="btn-close">✕</button>
+          <div class="modal-header-right">
+            <button type="button" id="fillFromPhoneBtn" class="btn-inline-chip">From Phone</button>
+            <button type="button" id="closeAddPersonModalBtn" class="btn-close">✕</button>
+          </div>
         </div>
         <form id="addPersonForm" novalidate>
           <div class="form-group">
@@ -657,8 +775,8 @@
             <input type="tel" id="personPhone" class="form-input" placeholder="10-digit number" pattern="[0-9+ -]*">
           </div>
           <div class="form-group">
-            <label for="personUpi" class="form-label">UPI ID (Optional)</label>
-            <input type="text" id="personUpi" class="form-input" placeholder="username@bank">
+            <label for="personUpi" class="form-label">UPI ID or Payment Name (Optional)</label>
+            <input type="text" id="personUpi" class="form-input" placeholder="username@bank or bank display name">
           </div>
           <div class="form-group">
             <label class="form-label">Group</label>
@@ -700,6 +818,10 @@
             <label for="editPersonUpi" class="form-label">UPI ID (Optional)</label>
             <input type="text" id="editPersonUpi" class="form-input" placeholder="username@bank">
           </div>
+          <div class="form-group hidden" id="editPersonAliasesWrap">
+            <label class="form-label">Linked Payment Names</label>
+            <div id="editPersonAliasesList" class="alias-chips-row"></div>
+          </div>
           <div class="form-group">
             <label class="form-label">Group</label>
             <div class="segmented-bar">
@@ -729,8 +851,17 @@
         </div>
         <form id="settleForm" novalidate>
           <div id="settlePersonInfo" class="grouped-list"></div>
+
           <div class="form-group mt-3">
-            <label for="settleAmount" class="form-label">Amount received (₹)</label>
+            <label class="form-label">Direction</label>
+            <div class="segmented-bar cols-2" id="settleDirectionBar">
+              <button type="button" class="seg-option active" data-dir="received">They Paid Me</button>
+              <button type="button" class="seg-option" data-dir="paid">I Paid Them</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="settleAmount" class="form-label" id="settleAmountLabel">Amount received (₹)</label>
             <input type="number" id="settleAmount" class="form-input input-lg tabular" step="any" required
               inputmode="decimal">
           </div>
@@ -739,7 +870,7 @@
             <input type="text" id="settleNotes" class="form-input" placeholder="UPI or Cash">
           </div>
           <div class="modal-footer mt-3">
-            <button type="submit" class="btn btn-success btn-block btn-lg">Confirm Settlement</button>
+            <button type="submit" class="btn btn-success btn-block btn-lg" id="submitSettleBtn">Confirm Settlement</button>
           </div>
         </form>
       </div>
@@ -760,12 +891,20 @@
           <div class="repayment-summary-box">
             <div class="repayment-amount-display tabular" id="repaymentAmountDisplay">₹0.00</div>
             <div class="text-xs text-muted" id="repaymentSourceDetail">Received from Sender</div>
+            <div class="mt-2">
+              <button type="button" id="repaymentNewContactBtn" class="btn-inline-chip">+ Save Sender as Contact</button>
+            </div>
           </div>
 
           <div class="form-group mt-3">
             <label for="repaymentPersonSelect" class="form-label">Sender contact</label>
             <select id="repaymentPersonSelect" class="form-input" required></select>
           </div>
+
+          <label class="plb-check-row mb-3" id="repaymentSaveAliasRow">
+            <input type="checkbox" id="repaymentSaveAliasCheck" checked>
+            <span id="repaymentSaveAliasText">Link this payment name to selected contact</span>
+          </label>
 
           <div class="breakdown-panel mb-3" id="repaymentBalancePreview"></div>
 
@@ -797,7 +936,7 @@
           <button type="button" id="closeUpdateModalBtn" class="btn-close">✕</button>
         </div>
         <div>
-          <div class="row-title" id="updateVersionTitle">WhoseTab v1.1.1</div>
+          <div class="row-title" id="updateVersionTitle">WhoseTab v1.2.0</div>
           <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Improvements and bug fixes.</div>
 
           <div id="updateProgressContainer" class="mt-3 hidden">
