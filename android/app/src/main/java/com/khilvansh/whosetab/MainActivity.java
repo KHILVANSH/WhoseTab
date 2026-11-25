@@ -19,7 +19,11 @@ import android.webkit.WebViewClient;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -30,6 +34,16 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
     private WebAppInterface webAppInterface;
+    private volatile boolean isWebPageLoaded = false;
+    private float cutoutLeftDp = 0f;
+    private float cutoutRightDp = 0f;
+
+    public static void notifyQuickExpensesUpdated() {
+        MainActivity inst = activeInstance;
+        if (inst != null) {
+            inst.runOnUiThread(inst::drainNativeQuickExpenses);
+        }
+    }
 
     public static void dispatchFromServiceIfVisible(JSONObject payload, boolean isRepayment) {
         MainActivity inst = activeInstance;
@@ -52,6 +66,11 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         updateSystemBarsTheme(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(lp);
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         // Request POST_NOTIFICATIONS runtime permission on Android 13+ so background status bar icon is always visible
@@ -70,6 +89,16 @@ public class MainActivity extends AppCompatActivity {
         webView.setKeepScreenOn(true);
         webView.setBackgroundColor(Color.parseColor("#09090B"));
         setContentView(webView);
+
+        ViewCompat.setOnApplyWindowInsetsListener(webView, (v, windowInsets) -> {
+            Insets cut = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout());
+            float density = getResources().getDisplayMetrics().density;
+            if (density <= 0f) density = 1f;
+            cutoutLeftDp = cut.left / density;
+            cutoutRightDp = cut.right / density;
+            applyCutoutCssVars();
+            return windowInsets;
+        });
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -94,6 +123,8 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                isWebPageLoaded = true;
+                applyCutoutCssVars();
                 drainNativeQuickExpenses();
                 handleIntentData(getIntent());
             }
@@ -101,6 +132,18 @@ public class MainActivity extends AppCompatActivity {
 
         webView.loadUrl("file:///android_asset/web/index.html");
         UpdateManager.checkSilentlyOnLaunch(this);
+    }
+
+    private void applyCutoutCssVars() {
+        if (webView == null || !isWebPageLoaded) return;
+        String js = String.format(
+            Locale.US,
+            "document.documentElement.style.setProperty('--cutout-left','%.1fpx');" +
+            "document.documentElement.style.setProperty('--cutout-right','%.1fpx');",
+            cutoutLeftDp,
+            cutoutRightDp
+        );
+        webView.post(() -> webView.evaluateJavascript(js, null));
     }
 
     public void updateSystemBarsTheme(boolean isDark) {
@@ -177,18 +220,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void drainNativeQuickExpenses() {
-        if (webView == null) return;
-        JSONArray queued = PaymentDataStore.consumeQueuedQuickExpenses(this);
-        if (queued != null && queued.length() > 0) {
-            final String arrStr = queued.toString();
-            webView.post(() -> {
-                String js = String.format(
-                    "if(window.app && typeof window.app.applyNativeQuickExpenses === 'function'){ window.app.applyNativeQuickExpenses(%s); }",
-                    arrStr
-                );
-                webView.evaluateJavascript(js, null);
-            });
-        }
+        if (webView == null || !isWebPageLoaded) return;
+        webView.post(() -> webView.evaluateJavascript(
+            "if(window.app && typeof window.app.drainQueuedNativeExpenses === 'function'){ window.app.drainQueuedNativeExpenses(); }",
+            null
+        ));
     }
 
     private void handleIntentData(Intent intent) {

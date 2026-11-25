@@ -319,7 +319,7 @@ class WhoseTabApp {
         }
       } catch (e) {}
     }
-    this.dom.appVersionDisplay.textContent = 'v1.1.0';
+    this.dom.appVersionDisplay.textContent = 'v1.1.1';
   }
 
   // ================= SCANNER STATUS & PERMISSIONS =================
@@ -730,12 +730,19 @@ class WhoseTabApp {
       }
     });
 
-    // Focus Re-checks
+    // Focus & Visibility Re-checks
     window.addEventListener('focus', () => {
       this.checkScannerStatus();
       this.checkInitialSetup();
       this.drainQueuedNativeExpenses();
       this.checkClipboardForPaytm();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        this.drainQueuedNativeExpenses();
+        this.checkPendingPayment();
+      }
     });
   }
 
@@ -1317,7 +1324,9 @@ class WhoseTabApp {
     this.renderModalPeopleChips();
     this.recalculateSplitBreakdown(true);
     this.dom.snapExpenseModal.classList.remove('hidden');
-    setTimeout(() => this.dom.snapAmount.focus(), 100);
+    if (window.innerHeight > 520) {
+      setTimeout(() => this.dom.snapAmount.focus(), 100);
+    }
   }
 
   openSnapModalWithPaytm(data) {

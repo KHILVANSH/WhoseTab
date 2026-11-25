@@ -1,0 +1,356 @@
+package com.khilvansh.whosetab;
+
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Color;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.DisplayMetrics;
+import android.util.Log;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+/**
+ * Shared binder for the compact bottom-right Quick-Add card used by both
+ * QuickAddPopupActivity (works above apps with HIDE_OVERLAY_WINDOWS like Paytm)
+ * and PaymentOverlayManager (WindowManager preview overlay).
+ */
+public class QuickAddCardBinder {
+
+    private static final String TAG = "WhoseTab";
+    private static final long AUTO_HIDE_MS = 25000L;
+
+    public interface DismissCallback {
+        void onDismissRequested();
+    }
+
+    public static void bind(Context context, View root, JSONObject data, DismissCallback onDismiss) {
+        if (context == null || root == null || data == null) return;
+
+        final Handler timerHandler = new Handler(Looper.getMainLooper());
+        final Runnable hideTask = () -> {
+            if (onDismiss != null) onDismiss.onDismissRequested();
+        };
+        final Runnable resetTimer = () -> {
+            timerHandler.removeCallbacks(hideTask);
+            timerHandler.postDelayed(hideTask, AUTO_HIDE_MS);
+        };
+        resetTimer.run();
+
+        String type = data.optString("type", "expense");
+        double amount = data.optDouble("amount", 0.0);
+        boolean isRepayment = "repayment".equals(type);
+        String counterparty = isRepayment
+            ? data.optString("sender", "Someone")
+            : data.optString("recipient", "Merchant").replaceAll("\\s+", " ").trim();
+
+        TextView titleTv = root.findViewById(R.id.overlayTitle);
+        TextView subtitleTv = root.findViewById(R.id.overlaySubtitle);
+        TextView closeBtn = root.findViewById(R.id.overlayCloseBtn);
+        LinearLayout contactsContainer = root.findViewById(R.id.overlayContactsContainer);
+        LinearLayout chipsList = root.findViewById(R.id.overlayChipsList);
+        TextView includeMeChip = root.findViewById(R.id.overlayIncludeMeChip);
+        TextView openAppBtn = root.findViewById(R.id.overlayOpenAppBtn);
+        TextView quickAddBtn = root.findViewById(R.id.overlayQuickAddBtn);
+
+        if (isRepayment) {
+            titleTv.setText(String.format(Locale.US, "Received ₹%.2f", amount));
+            titleTv.setTextColor(Color.parseColor("#34D399"));
+            subtitleTv.setText("From " + counterparty);
+            contactsContainer.setVisibility(View.GONE);
+            openAppBtn.setText("Dismiss");
+            quickAddBtn.setText("Confirm Settlement");
+        } else {
+            titleTv.setText(String.format(Locale.US, "Paid ₹%.2f", amount));
+            titleTv.setTextColor(Color.parseColor("#FFFFFF"));
+            subtitleTv.setText(counterparty);
+        }
+
+        final Set<String> selectedPersonIds = new LinkedHashSet<>();
+        final List<JSONObject> contactObjects = new ArrayList<>();
+        final boolean[] includeMe = new boolean[] { false };
+
+        if (!isRepayment) {
+            JSONArray synced = PaymentDataStore.getSyncedContacts(context);
+            String matchedId = findBestContactMatch(synced, counterparty);
+            if (synced.length() == 0) {
+                contactsContainer.setVisibility(View.GONE);
+                quickAddBtn.setText("Split in App");
+            } else {
+                contactsContainer.setVisibility(View.VISIBLE);
+                for (int i = 0; i < synced.length(); i++) {
+                    JSONObject p = synced.optJSONObject(i);
+                    if (p == null) continue;
+                    String id = p.optString("id", "");
+                    String name = p.optString("name", "");
+                    if (id.isEmpty() || name.isEmpty()) continue;
+                    contactObjects.add(p);
+
+                    TextView chip = new TextView(context);
+                    String shortName = name.contains(" ") ? name.substring(0, name.indexOf(' ')) : name;
+                    chip.setText(shortName);
+                    chip.setTextSize(12);
+                    chip.setBackgroundResource(R.drawable.overlay_chip_bg);
+                    chip.setGravity(Gravity.CENTER);
+                    int hPad = dpToPx(context, 12);
+                    chip.setPadding(hPad, 0, hPad, 0);
+
+                    boolean isPreselected = id.equals(matchedId);
+                    if (isPreselected) {
+                        selectedPersonIds.add(id);
+                        chip.setSelected(true);
+                        chip.setTextColor(Color.parseColor("#FFFFFF"));
+                    } else {
+                        chip.setSelected(false);
+                        chip.setTextColor(Color.parseColor("#E4E4E7"));
+                    }
+
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        dpToPx(context, 32)
+                    );
+                    lp.setMarginEnd(dpToPx(context, 6));
+                    chip.setLayoutParams(lp);
+
+                    chip.setOnClickListener(v -> {
+                        resetTimer.run();
+                        if (selectedPersonIds.contains(id)) {
+                            selectedPersonIds.remove(id);
+                            chip.setSelected(false);
+                            chip.setTextColor(Color.parseColor("#E4E4E7"));
+                        } else {
+                            selectedPersonIds.add(id);
+                            chip.setSelected(true);
+                            chip.setTextColor(Color.parseColor("#FFFFFF"));
+                        }
+                        updateQuickAddButtonLabel(quickAddBtn, selectedPersonIds, contactObjects);
+                    });
+
+                    chipsList.addView(chip);
+                }
+
+                updateQuickAddButtonLabel(quickAddBtn, selectedPersonIds, contactObjects);
+
+                includeMeChip.setOnClickListener(v -> {
+                    resetTimer.run();
+                    includeMe[0] = !includeMe[0];
+                    includeMeChip.setSelected(includeMe[0]);
+                    includeMeChip.setTextColor(Color.parseColor(includeMe[0] ? "#FFFFFF" : "#D4D4D8"));
+                });
+            }
+        }
+
+        closeBtn.setOnClickListener(v -> {
+            timerHandler.removeCallbacks(hideTask);
+            dismissPayment(context, data, isRepayment);
+            if (onDismiss != null) onDismiss.onDismissRequested();
+        });
+
+        openAppBtn.setOnClickListener(v -> {
+            timerHandler.removeCallbacks(hideTask);
+            if (isRepayment) {
+                dismissPayment(context, data, true);
+                if (onDismiss != null) onDismiss.onDismissRequested();
+            } else {
+                if (onDismiss != null) onDismiss.onDismissRequested();
+                launchMainAppWithData(context, data, false);
+            }
+        });
+
+        quickAddBtn.setOnClickListener(v -> {
+            timerHandler.removeCallbacks(hideTask);
+            if (isRepayment) {
+                if (onDismiss != null) onDismiss.onDismissRequested();
+                launchMainAppWithData(context, data, true);
+                return;
+            }
+
+            if (contactObjects.isEmpty()) {
+                if (onDismiss != null) onDismiss.onDismissRequested();
+                launchMainAppWithData(context, data, false);
+                return;
+            }
+
+            if (selectedPersonIds.isEmpty()) {
+                Toast.makeText(context, "Select a contact chip above or tap Open App", Toast.LENGTH_SHORT).show();
+                resetTimer.run();
+                return;
+            }
+
+            try {
+                int numPeople = selectedPersonIds.size();
+                int divisor = includeMe[0] ? (numPeople + 1) : numPeople;
+                long totalCents = Math.round(amount * 100);
+                long perCents = Math.floorDiv(totalCents, divisor);
+                long remainderCents = totalCents - (perCents * divisor);
+
+                double myShare = includeMe[0] ? (perCents / 100.0) : 0.0;
+                JSONArray splits = new JSONArray();
+                List<String> chosenNames = new ArrayList<>();
+
+                int idx = 0;
+                for (String pid : selectedPersonIds) {
+                    long cents = perCents + (idx < remainderCents ? 1 : 0);
+                    JSONObject splitObj = new JSONObject();
+                    splitObj.put("personId", pid);
+                    splitObj.put("amountOwed", cents / 100.0);
+                    splits.put(splitObj);
+                    idx++;
+
+                    for (JSONObject c : contactObjects) {
+                        if (pid.equals(c.optString("id"))) {
+                            chosenNames.add(c.optString("name"));
+                            break;
+                        }
+                    }
+                }
+
+                JSONObject expenseObj = new JSONObject();
+                expenseObj.put("id", "e_" + System.currentTimeMillis());
+                expenseObj.put("title", counterparty);
+                expenseObj.put("totalAmount", amount);
+                expenseObj.put("paidById", "me");
+                expenseObj.put("splitType", includeMe[0] ? "EqualSplit" : "BoughtForPerson");
+                expenseObj.put("splits", splits);
+                expenseObj.put("category", data.optString("suggestedCategory", "General"));
+                expenseObj.put("paymentSource", "Paytm");
+                expenseObj.put("myShare", myShare);
+                expenseObj.put("rawText", data.optString("rawText", ""));
+                expenseObj.put("timestamp", System.currentTimeMillis());
+
+                PaymentDataStore.addQueuedQuickExpense(context, expenseObj);
+                dismissPayment(context, data, false);
+
+                // Sync live immediately if MainActivity WebView is loaded in memory
+                MainActivity.notifyQuickExpensesUpdated();
+
+                String namesJoined = android.text.TextUtils.join(", ", chosenNames);
+                Toast.makeText(
+                    context,
+                    String.format(Locale.US, "Added ₹%.2f to %s", amount, namesJoined),
+                    Toast.LENGTH_SHORT
+                ).show();
+            } catch (Exception e) {
+                Log.e(TAG, "Error queueing quick expense", e);
+            }
+
+            if (onDismiss != null) onDismiss.onDismissRequested();
+        });
+
+        final float[] downX = new float[1];
+        root.setOnTouchListener((v, event) -> {
+            resetTimer.run();
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                downX[0] = event.getRawX();
+            } else if (event.getAction() == MotionEvent.ACTION_UP) {
+                float deltaX = event.getRawX() - downX[0];
+                if (Math.abs(deltaX) > dpToPx(context, 90)) {
+                    timerHandler.removeCallbacks(hideTask);
+                    dismissPayment(context, data, isRepayment);
+                    if (onDismiss != null) onDismiss.onDismissRequested();
+                    return true;
+                }
+            }
+            return false;
+        });
+    }
+
+    private static String findBestContactMatch(JSONArray contacts, String rawCounterparty) {
+        if (contacts == null || rawCounterparty == null || rawCounterparty.isEmpty()) return null;
+        String cleanCp = rawCounterparty.toLowerCase().replaceAll("[^a-z0-9]", "");
+        if (cleanCp.length() < 3) return null;
+        String phoneticCp = cleanCp.replace("h", "");
+
+        for (int i = 0; i < contacts.length(); i++) {
+            JSONObject c = contacts.optJSONObject(i);
+            if (c == null) continue;
+            String id = c.optString("id", "");
+            String name = c.optString("name", "");
+            String cleanName = name.toLowerCase().replaceAll("[^a-z0-9]", "");
+            if (cleanName.isEmpty()) continue;
+
+            if (cleanName.equals(cleanCp) || cleanCp.contains(cleanName) || cleanName.contains(cleanCp)) {
+                return id;
+            }
+            String first = name.toLowerCase().split("\\s+")[0].replaceAll("[^a-z0-9]", "");
+            if (first.length() >= 3 && (cleanCp.contains(first) || first.contains(cleanCp))) {
+                return id;
+            }
+            String phoneticName = cleanName.replace("h", "");
+            if (phoneticName.length() >= 3 && (phoneticName.equals(phoneticCp) || phoneticCp.contains(phoneticName))) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    private static void updateQuickAddButtonLabel(TextView btn, Set<String> selectedIds, List<JSONObject> contacts) {
+        if (selectedIds.isEmpty()) {
+            btn.setText("Quick Add");
+            btn.setAlpha(0.75f);
+            return;
+        }
+        btn.setAlpha(1.0f);
+        if (selectedIds.size() == 1) {
+            String pid = selectedIds.iterator().next();
+            for (JSONObject c : contacts) {
+                if (pid.equals(c.optString("id"))) {
+                    String name = c.optString("name", "Tab");
+                    String first = name.contains(" ") ? name.substring(0, name.indexOf(' ')) : name;
+                    btn.setText("Add to " + first);
+                    return;
+                }
+            }
+        }
+        btn.setText("Add (" + selectedIds.size() + ")");
+    }
+
+    private static void dismissPayment(Context context, JSONObject data, boolean isRepayment) {
+        if (isRepayment) {
+            PaymentDataStore.markRepaymentDismissed(context, PaymentDataStore.getRepaymentSignature(data));
+            PaymentDataStore.clearPendingRepayment(context);
+        } else {
+            PaymentDataStore.markPaymentDismissed(context, PaymentDataStore.getSignature(data));
+            PaymentDataStore.clearPendingPayment(context);
+        }
+    }
+
+    private static void launchMainAppWithData(Context context, JSONObject data, boolean isRepayment) {
+        Intent openIntent = new Intent(context, MainActivity.class);
+        if (isRepayment) {
+            openIntent.putExtra("paytm_type", "repayment");
+            openIntent.putExtra("paytm_amount", data.optDouble("amount", 0.0));
+            openIntent.putExtra("paytm_sender", data.optString("sender", "Someone"));
+            openIntent.putExtra("paytm_note", data.optString("rawText", ""));
+            openIntent.putExtra("paytm_postTime", data.optLong("postTime", 0L));
+        } else {
+            openIntent.putExtra("paytm_amount", data.optDouble("amount", 0.0));
+            openIntent.putExtra("paytm_recipient", data.optString("recipient", "Merchant"));
+            openIntent.putExtra("paytm_txnId", data.optString("txnId", ""));
+            openIntent.putExtra("paytm_category", data.optString("suggestedCategory", "General"));
+            openIntent.putExtra("paytm_note", data.optString("rawText", ""));
+            openIntent.putExtra("paytm_postTime", data.optLong("postTime", 0L));
+        }
+        openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        context.startActivity(openIntent);
+    }
+
+    public static int dpToPx(Context context, int dp) {
+        DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+        return Math.round(dp * metrics.density);
+    }
+}

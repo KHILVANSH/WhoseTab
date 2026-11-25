@@ -1,21 +1,25 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#09090B">
   <meta name="description" content="WhoseTab — Offline expense ledger and payment tracker.">
   <title>WhoseTab</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
   <div class="app-shell">
 
     <!-- Top Application Bar -->
     <header class="app-header">
       <div class="brand-group">
-        <svg class="brand-mark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg class="brand-mark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M5 3h14a2 2 0 0 1 2 2v16l-3-2-3 2-3-2-3 2-3-2-3 2V5a2 2 0 0 1 2-2z"></path>
           <line x1="8" y1="8" x2="16" y2="8"></line>
           <line x1="8" y1="12" x2="16" y2="12"></line>
@@ -25,21 +29,26 @@
       </div>
 
       <div class="header-actions">
-        <button type="button" id="scannerStatusBadge" class="status-pill active" aria-label="Background payment listener status">
+        <button type="button" id="scannerStatusBadge" class="status-pill active"
+          aria-label="Background payment listener status">
           <span class="status-dot"></span>
           <span id="scannerStatusText">Listening</span>
         </button>
 
-        <button type="button" id="openSnapModalBtn" class="icon-action-btn" aria-label="Add Expense" title="Add Expense">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <button type="button" id="openSnapModalBtn" class="icon-action-btn" aria-label="Add Expense"
+          title="Add Expense">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+            stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
         </button>
 
         <div class="menu-anchor">
-          <button type="button" id="headerMoreBtn" class="icon-action-btn" aria-label="More options" aria-expanded="false">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <button type="button" id="headerMoreBtn" class="icon-action-btn" aria-label="More options"
+            aria-expanded="false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="5" r="1"></circle>
               <circle cx="12" cy="12" r="1"></circle>
               <circle cx="12" cy="19" r="1"></circle>
@@ -48,28 +57,55 @@
 
           <div id="headerOverflowMenu" class="popover-menu hidden" role="menu">
             <button type="button" class="menu-item" id="menuAddContact" role="menuitem">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="8.5" cy="7" r="4"></circle>
+                <line x1="20" y1="8" x2="20" y2="14"></line>
+                <line x1="23" y1="11" x2="17" y2="11"></line>
+              </svg>
               <span>Add Contact</span>
             </button>
             <button type="button" class="menu-item" id="menuPermissions" role="menuitem">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
               <span>Permissions</span>
             </button>
             <button type="button" class="menu-item" id="menuTestOverlay" role="menuitem">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><rect x="11" y="13" width="8" height="6" rx="1"></rect></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                <rect x="11" y="13" width="8" height="6" rx="1"></rect>
+              </svg>
               <span>Preview Quick-Add Popup</span>
             </button>
             <div class="menu-divider"></div>
             <button type="button" class="menu-item" id="menuExportData" role="menuitem">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
               <span>Export Backup</span>
             </button>
             <button type="button" class="menu-item" id="menuImportData" role="menuitem">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
               <span>Import Backup</span>
             </button>
             <button type="button" class="menu-item" id="menuCheckUpdates" role="menuitem">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+              </svg>
               <span>Check for Updates</span>
             </button>
           </div>
@@ -82,55 +118,66 @@
 
       <!-- VIEW 1: LEDGER OVERVIEW -->
       <section id="viewDashboard" class="tab-view active">
-        <!-- Net Balance Hero Card -->
-        <div class="balance-hero-card">
-          <div class="hero-top">
-            <div>
-              <span class="hero-eyebrow">Net Owed to You</span>
-              <div class="hero-amount tabular" id="totalOwedToMe">₹0.00</div>
+        <div class="dashboard-layout">
+          <div class="dashboard-left">
+            <!-- Net Balance Hero Card -->
+            <div class="balance-hero-card">
+              <div class="hero-top">
+                <div>
+                  <span class="hero-eyebrow">Net Owed to You</span>
+                  <div class="hero-amount tabular" id="totalOwedToMe">₹0.00</div>
+                </div>
+                <button type="button" id="heroAddBtn" class="btn-pill-primary">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  <span>Expense</span>
+                </button>
+              </div>
+              <div class="hero-footer">
+                <span class="hero-meta" id="activeDebtorsCount">0 active balances</span>
+                <span class="hero-meta-dot" aria-hidden="true">•</span>
+                <span class="hero-meta" id="heroExpenseCount">0 entries</span>
+              </div>
             </div>
-            <button type="button" id="heroAddBtn" class="btn-pill-primary">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              <span>Expense</span>
-            </button>
-          </div>
-          <div class="hero-footer">
-            <span class="hero-meta" id="activeDebtorsCount">0 active balances</span>
-            <span class="hero-meta-dot" aria-hidden="true">•</span>
-            <span class="hero-meta" id="heroExpenseCount">0 entries</span>
-          </div>
-        </div>
 
-        <!-- Section: Active Balances -->
-        <div class="section-bar">
-          <h2 class="section-title">Balances</h2>
-          <div class="section-bar-actions">
-            <div class="segmented-mini" role="tablist">
-              <button type="button" class="seg-mini-btn active" id="dashboardBalActiveBtn" data-mode="active">Unsettled</button>
-              <button type="button" class="seg-mini-btn" id="dashboardBalAllBtn" data-mode="all">All</button>
+            <!-- Section: Active Balances -->
+            <div class="section-bar">
+              <h2 class="section-title">Balances</h2>
+              <div class="section-bar-actions">
+                <div class="segmented-mini" role="tablist">
+                  <button type="button" class="seg-mini-btn active" id="dashboardBalActiveBtn"
+                    data-mode="active">Unsettled</button>
+                  <button type="button" class="seg-mini-btn" id="dashboardBalAllBtn" data-mode="all">All</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="peopleList" class="grouped-list">
+              <!-- Populated via JS -->
             </div>
           </div>
-        </div>
 
-        <div id="peopleList" class="grouped-list">
-          <!-- Populated via JS -->
-        </div>
+          <div class="dashboard-right">
+            <!-- Section: Recent Activity (Expenses & Repayments) -->
+            <div class="section-bar mt-6 activity-bar">
+              <div class="section-title-group">
+                <h2 class="section-title">Activity</h2>
+                <span class="count-pill tabular" id="expenseCountBadge">0</span>
+              </div>
+              <div class="segmented-mini" role="tablist">
+                <button type="button" class="seg-mini-btn active" data-act-filter="all">All</button>
+                <button type="button" class="seg-mini-btn" data-act-filter="expense">Spent</button>
+                <button type="button" class="seg-mini-btn" data-act-filter="repayment">Repaid</button>
+              </div>
+            </div>
 
-        <!-- Section: Recent Activity (Expenses & Repayments) -->
-        <div class="section-bar mt-6">
-          <div class="section-title-group">
-            <h2 class="section-title">Activity</h2>
-            <span class="count-pill tabular" id="expenseCountBadge">0</span>
+            <div id="recentExpensesList" class="grouped-list">
+              <!-- Populated via JS -->
+            </div>
           </div>
-          <div class="segmented-mini" role="tablist">
-            <button type="button" class="seg-mini-btn active" data-act-filter="all">All</button>
-            <button type="button" class="seg-mini-btn" data-act-filter="expense">Spent</button>
-            <button type="button" class="seg-mini-btn" data-act-filter="repayment">Repaid</button>
-          </div>
-        </div>
-
-        <div id="recentExpensesList" class="grouped-list">
-          <!-- Populated via JS -->
         </div>
       </section>
 
@@ -139,22 +186,32 @@
         <div class="section-bar">
           <h2 class="section-title">People</h2>
           <button type="button" id="addPersonPageBtn" class="btn-pill-subtle">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
             <span>New Contact</span>
           </button>
         </div>
 
-        <div class="search-field-wrap mt-2">
-          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="search" id="peopleSearchInput" class="search-input" placeholder="Search by name, phone, or UPI">
-        </div>
+        <div class="people-toolbar">
+          <div class="search-field-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="search" id="peopleSearchInput" class="search-input" placeholder="Search by name, phone, or UPI">
+          </div>
 
-        <div class="filter-strip mt-3">
-          <button type="button" class="chip active" data-filter="all">All</button>
-          <button type="button" class="chip" data-filter="unsettled">Unsettled</button>
-          <button type="button" class="chip" data-filter="Roommate">Roommates</button>
-          <button type="button" class="chip" data-filter="Classmate">Classmates</button>
-          <button type="button" class="chip" data-filter="Friend">Friends</button>
+          <div class="filter-strip">
+            <button type="button" class="chip active" data-filter="all">All</button>
+            <button type="button" class="chip" data-filter="unsettled">Unsettled</button>
+            <button type="button" class="chip" data-filter="Roommate">Roommates</button>
+            <button type="button" class="chip" data-filter="Classmate">Classmates</button>
+            <button type="button" class="chip" data-filter="Friend">Friends</button>
+          </div>
         </div>
 
         <div id="contactsFullList" class="grouped-list mt-3">
@@ -166,124 +223,147 @@
       <section id="viewSettings" class="tab-view">
         <h2 class="page-heading">Settings</h2>
 
-        <div class="settings-section-label">Payment Detection</div>
-        <div class="grouped-list settings-group">
-          <div class="settings-row">
-            <div class="settings-row-info">
-              <span class="row-title">When payment occurs</span>
-              <span class="row-subtitle">Behavior after paying via Paytm or UPI</span>
-            </div>
-            <select id="detectionModeSelector" class="inline-select">
-              <option value="overlay">Quick-Add Popup</option>
-              <option value="open_app">Open Full App</option>
-              <option value="notification">Notification Only</option>
-            </select>
-          </div>
+        <div class="settings-grid">
+          <div class="settings-block">
+            <div class="settings-section-label">Payment Detection</div>
+            <div class="grouped-list settings-group">
+              <div class="settings-row">
+                <div class="settings-row-info">
+                  <span class="row-title">When payment occurs</span>
+                  <span class="row-subtitle">Behavior after paying via Paytm or UPI</span>
+                </div>
+                <select id="detectionModeSelector" class="inline-select">
+                  <option value="overlay">Quick-Add Popup</option>
+                  <option value="open_app">Open Full App</option>
+                  <option value="notification">Notification Only</option>
+                </select>
+              </div>
 
-          <div class="settings-row">
-            <div class="settings-row-info">
-              <span class="row-title">Popup delay</span>
-              <span class="row-subtitle">Wait before displaying prompt</span>
-            </div>
-            <select id="paytmDelaySelector" class="inline-select">
-              <option value="0" selected>Instant</option>
-              <option value="1000">1s</option>
-              <option value="2000">2s</option>
-              <option value="3000">3s</option>
-              <option value="5000">5s</option>
-            </select>
-          </div>
+              <div class="settings-row">
+                <div class="settings-row-info">
+                  <span class="row-title">Popup delay</span>
+                  <span class="row-subtitle">Wait before displaying prompt</span>
+                </div>
+                <select id="paytmDelaySelector" class="inline-select">
+                  <option value="0" selected>Instant</option>
+                  <option value="1000">1s</option>
+                  <option value="2000">2s</option>
+                  <option value="3000">3s</option>
+                  <option value="5000">5s</option>
+                </select>
+              </div>
 
-          <button type="button" id="testOverlaySettingsBtn" class="settings-row interactive-row">
-            <div class="settings-row-info">
-              <span class="row-title">Preview bottom-right popup</span>
-              <span class="row-subtitle">Test quick-add toast overlay</span>
-            </div>
-            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
-        </div>
-
-        <div class="settings-section-label">Background Service</div>
-        <div class="grouped-list settings-group">
-          <div class="settings-row" id="settingsItemNotif">
-            <div class="settings-row-info">
-              <span class="row-title">Notification Access</span>
-              <span class="row-subtitle">Read Paytm &amp; bank SMS alerts</span>
-            </div>
-            <button type="button" id="grantNotificationAccessBtn" class="btn-status-action">Enable</button>
-          </div>
-
-          <div class="settings-row" id="settingsItemPostNotif">
-            <div class="settings-row-info">
-              <span class="row-title">Status Bar Icon &amp; Alerts</span>
-              <span class="row-subtitle">Shows persistent background indicator</span>
-            </div>
-            <button type="button" id="grantPostNotifBtn" class="btn-status-action">Allow</button>
-          </div>
-
-          <div class="settings-row" id="settingsItemOverlay">
-            <div class="settings-row-info">
-              <span class="row-title">Display Over Apps</span>
-              <span class="row-subtitle">Show quick-add popup over Paytm</span>
-            </div>
-            <button type="button" id="grantOverlayAccessBtn" class="btn-status-action">Enable</button>
-          </div>
-
-          <div class="settings-row" id="settingsItemBattery">
-            <div class="settings-row-info">
-              <span class="row-title">Unrestricted Battery</span>
-              <span class="row-subtitle">Keep listener active in background</span>
-            </div>
-            <button type="button" id="grantBatteryAccessBtn" class="btn-status-action">Allow</button>
-          </div>
-        </div>
-
-        <div class="settings-section-label">Appearance</div>
-        <div class="grouped-list settings-group">
-          <div class="settings-row">
-            <div class="settings-row-info">
-              <span class="row-title">Theme</span>
-              <span class="row-subtitle">Interface color scheme</span>
-            </div>
-            <div class="segmented-mini">
-              <button type="button" class="seg-mini-btn" id="themeDarkBtn">Dark</button>
-              <button type="button" class="seg-mini-btn" id="themeLightBtn">Light</button>
+              <button type="button" id="testOverlaySettingsBtn" class="settings-row interactive-row">
+                <div class="settings-row-info">
+                  <span class="row-title">Preview bottom-right popup</span>
+                  <span class="row-subtitle">Test quick-add toast overlay</span>
+                </div>
+                <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
             </div>
           </div>
 
-          <div class="settings-row">
-            <div class="settings-row-info">
-              <span class="row-title">Currency</span>
+          <div class="settings-block">
+            <div class="settings-section-label">Background Service</div>
+            <div class="grouped-list settings-group">
+              <div class="settings-row" id="settingsItemNotif">
+                <div class="settings-row-info">
+                  <span class="row-title">Notification Access</span>
+                  <span class="row-subtitle">Read Paytm &amp; bank SMS alerts</span>
+                </div>
+                <button type="button" id="grantNotificationAccessBtn" class="btn-status-action">Enable</button>
+              </div>
+
+              <div class="settings-row" id="settingsItemPostNotif">
+                <div class="settings-row-info">
+                  <span class="row-title">Status Bar Icon &amp; Alerts</span>
+                  <span class="row-subtitle">Shows persistent background indicator</span>
+                </div>
+                <button type="button" id="grantPostNotifBtn" class="btn-status-action">Allow</button>
+              </div>
+
+              <div class="settings-row" id="settingsItemOverlay">
+                <div class="settings-row-info">
+                  <span class="row-title">Display Over Apps</span>
+                  <span class="row-subtitle">Show quick-add popup over Paytm</span>
+                </div>
+                <button type="button" id="grantOverlayAccessBtn" class="btn-status-action">Enable</button>
+              </div>
+
+              <div class="settings-row" id="settingsItemBattery">
+                <div class="settings-row-info">
+                  <span class="row-title">Unrestricted Battery</span>
+                  <span class="row-subtitle">Keep listener active in background</span>
+                </div>
+                <button type="button" id="grantBatteryAccessBtn" class="btn-status-action">Allow</button>
+              </div>
             </div>
-            <span class="value-muted">INR (₹)</span>
           </div>
-        </div>
 
-        <div class="settings-section-label">Application &amp; Backup</div>
-        <div class="grouped-list settings-group">
-          <div class="settings-row">
-            <div class="settings-row-info">
-              <span class="row-title">Version <span id="appVersionDisplay" class="text-muted">v1.1.0</span></span>
-              <span class="row-subtitle" id="updateStatusNotice">Stored locally on device</span>
+          <div class="settings-block">
+            <div class="settings-section-label">Appearance</div>
+            <div class="grouped-list settings-group">
+              <div class="settings-row">
+                <div class="settings-row-info">
+                  <span class="row-title">Theme</span>
+                  <span class="row-subtitle">Interface color scheme</span>
+                </div>
+                <div class="segmented-mini">
+                  <button type="button" class="seg-mini-btn" id="themeDarkBtn">Dark</button>
+                  <button type="button" class="seg-mini-btn" id="themeLightBtn">Light</button>
+                </div>
+              </div>
+
+              <div class="settings-row">
+                <div class="settings-row-info">
+                  <span class="row-title">Currency</span>
+                </div>
+                <span class="value-muted">INR (₹)</span>
+              </div>
             </div>
-            <button type="button" id="checkForUpdatesBtn" class="btn-status-action">Check</button>
           </div>
 
-          <button type="button" id="exportDataBtn" class="settings-row interactive-row">
-            <span class="row-title">Export JSON Backup</span>
-            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
+          <div class="settings-block">
+            <div class="settings-section-label">Application &amp; Backup</div>
+            <div class="grouped-list settings-group">
+              <div class="settings-row">
+                <div class="settings-row-info">
+                  <span class="row-title">Version <span id="appVersionDisplay" class="text-muted">v1.1.1</span></span>
+                  <span class="row-subtitle" id="updateStatusNotice">Stored locally on device</span>
+                </div>
+                <button type="button" id="checkForUpdatesBtn" class="btn-status-action">Check</button>
+              </div>
 
-          <button type="button" id="importDataBtn" class="settings-row interactive-row">
-            <span class="row-title">Import JSON Backup</span>
-            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
-          <input type="file" id="importFileInput" accept=".json" style="display: none;">
+              <button type="button" id="exportDataBtn" class="settings-row interactive-row">
+                <span class="row-title">Export JSON Backup</span>
+                <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
 
-          <button type="button" id="clearDataBtn" class="settings-row interactive-row danger-row">
-            <span class="row-title text-danger">Reset Ledger Data</span>
-            <svg class="row-chevron text-danger" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg>
-          </button>
+              <button type="button" id="importDataBtn" class="settings-row interactive-row">
+                <span class="row-title">Import JSON Backup</span>
+                <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+              <input type="file" id="importFileInput" accept=".json" style="display: none;">
+
+              <button type="button" id="clearDataBtn" class="settings-row interactive-row danger-row">
+                <span class="row-title text-danger">Reset Ledger Data</span>
+                <svg class="row-chevron text-danger" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -309,19 +389,35 @@
     <nav class="bottom-nav">
       <button type="button" class="nav-item active" data-target="viewDashboard">
         <span class="nav-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
         </span>
         <span class="nav-label">Ledger</span>
       </button>
       <button type="button" class="nav-item" data-target="viewPeople">
         <span class="nav-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
         </span>
         <span class="nav-label">People</span>
       </button>
       <button type="button" class="nav-item" data-target="viewSettings">
         <span class="nav-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+            </path>
+          </svg>
         </span>
         <span class="nav-label">Settings</span>
       </button>
@@ -340,7 +436,8 @@
         </div>
 
         <p class="sheet-desc">
-          Enable these permissions so WhoseTab stays active in the background and shows the quick-add popup on Paytm payments.
+          Enable these permissions so WhoseTab stays active in the background and shows the quick-add popup on Paytm
+          payments.
         </p>
 
         <div class="grouped-list mt-3">
@@ -379,7 +476,8 @@
 
         <div class="sheet-actions mt-4">
           <button type="button" id="completeSetupBtn" class="btn btn-primary btn-block btn-lg">Done</button>
-          <button type="button" id="skipSetupBtn" class="btn-text-subtle btn-block mt-2">Configure later in Settings</button>
+          <button type="button" id="skipSetupBtn" class="btn-text-subtle btn-block mt-2">Configure later in
+            Settings</button>
         </div>
       </div>
     </div>
@@ -399,15 +497,26 @@
         <div class="grouped-list mt-3">
           <button type="button" id="actionSplitBtn" class="settings-row interactive-row">
             <span class="row-title">Add Expense</span>
-            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
           </button>
           <button type="button" id="actionSettleBtn" class="settings-row interactive-row">
             <span class="row-title text-success">Record Settlement</span>
-            <svg class="row-chevron text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <svg class="row-chevron text-success" width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
           </button>
           <button type="button" id="actionEditPersonBtn" class="settings-row interactive-row">
             <span class="row-title">Edit Contact Details</span>
-            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            <svg class="row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
           </button>
         </div>
 
@@ -441,7 +550,7 @@
 
     <!-- SHEET: ADD / LOG EXPENSE -->
     <div id="snapExpenseModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
-      <div class="modal-sheet">
+      <div class="modal-sheet modal-sheet-wide">
         <div class="sheet-handle"></div>
         <div class="modal-header">
           <h3 class="sheet-title" id="modalTitle">New Expense</h3>
@@ -451,64 +560,76 @@
         <form id="snapExpenseForm" novalidate>
           <div id="snapFormError" class="form-error-banner hidden" role="alert"></div>
 
-          <!-- Hero Numeric Amount -->
-          <div class="hero-input-box">
-            <span class="hero-currency">₹</span>
-            <input type="number" id="snapAmount" class="hero-num-input tabular" placeholder="0.00" step="any" required inputmode="decimal">
-          </div>
+          <div class="snap-form-grid">
+            <div class="snap-col-left">
+              <!-- Hero Numeric Amount -->
+              <div class="hero-input-box">
+                <span class="hero-currency">₹</span>
+                <input type="number" id="snapAmount" class="hero-num-input tabular" placeholder="0.00" step="any" required
+                  inputmode="decimal">
+              </div>
 
-          <div class="form-group mt-3">
-            <input type="text" id="snapTitle" class="form-input" placeholder="Description (e.g. Tea Stall, Groceries)">
-          </div>
+              <div class="form-group mt-3">
+                <input type="text" id="snapTitle" class="form-input" placeholder="Description (e.g. Tea Stall, Groceries)">
+              </div>
 
-          <!-- Single-line Scrollable Category Strip -->
-          <div class="form-group">
-            <div class="category-strip">
-              <label class="cat-pill"><input type="radio" name="category" value="General" checked><span>General</span></label>
-              <label class="cat-pill"><input type="radio" name="category" value="Groceries"><span>Groceries</span></label>
-              <label class="cat-pill"><input type="radio" name="category" value="FoodDining"><span>Dining</span></label>
-              <label class="cat-pill"><input type="radio" name="category" value="SnacksChai"><span>Snacks</span></label>
-              <label class="cat-pill"><input type="radio" name="category" value="StationeryBooks"><span>Books</span></label>
-              <label class="cat-pill"><input type="radio" name="category" value="RoomRentUtilities"><span>Utilities</span></label>
-            </div>
-          </div>
-
-          <!-- Split People Selector -->
-          <div class="form-group" id="peopleSelectSection">
-            <div class="label-row">
-              <label class="form-label">Split between</label>
-              <div class="people-actions-row">
-                <button type="button" class="btn-link-xs" id="selectAllPeopleBtn">Select All</button>
-                <button type="button" class="btn-link-xs" id="clearAllPeopleBtn">Clear</button>
+              <!-- Single-line Scrollable Category Strip -->
+              <div class="form-group">
+                <div class="category-strip">
+                  <label class="cat-pill"><input type="radio" name="category" value="General"
+                      checked><span>General</span></label>
+                  <label class="cat-pill"><input type="radio" name="category"
+                      value="Groceries"><span>Groceries</span></label>
+                  <label class="cat-pill"><input type="radio" name="category" value="FoodDining"><span>Dining</span></label>
+                  <label class="cat-pill"><input type="radio" name="category" value="SnacksChai"><span>Snacks</span></label>
+                  <label class="cat-pill"><input type="radio" name="category"
+                      value="StationeryBooks"><span>Books</span></label>
+                  <label class="cat-pill"><input type="radio" name="category"
+                      value="RoomRentUtilities"><span>Utilities</span></label>
+                </div>
               </div>
             </div>
-            <div id="modalPeopleChips" class="people-chips-grid"></div>
-            <div id="selectedPeopleSummary" class="text-xs text-muted mt-1">Select contacts</div>
-          </div>
 
-          <!-- Your Share Bar -->
-          <div class="form-group">
-            <div class="label-row">
-              <label for="snapMyShare" class="form-label">Your share</label>
-              <div class="segmented-mini">
-                <button type="button" class="seg-mini-btn active" id="preset100ThemBtn">None for me</button>
-                <button type="button" class="seg-mini-btn" id="presetSplitEvenBtn">Split equally</button>
+            <div class="snap-col-right">
+              <!-- Split People Selector -->
+              <div class="form-group" id="peopleSelectSection">
+                <div class="label-row">
+                  <label class="form-label">Split between</label>
+                  <div class="people-actions-row">
+                    <button type="button" class="btn-link-xs" id="selectAllPeopleBtn">Select All</button>
+                    <button type="button" class="btn-link-xs" id="clearAllPeopleBtn">Clear</button>
+                  </div>
+                </div>
+                <div id="modalPeopleChips" class="people-chips-grid"></div>
+                <div id="selectedPeopleSummary" class="text-xs text-muted mt-1">Select contacts</div>
+              </div>
+
+              <!-- Your Share Bar -->
+              <div class="form-group">
+                <div class="label-row">
+                  <label for="snapMyShare" class="form-label">Your share</label>
+                  <div class="segmented-mini">
+                    <button type="button" class="seg-mini-btn active" id="preset100ThemBtn">None for me</button>
+                    <button type="button" class="seg-mini-btn" id="presetSplitEvenBtn">Split equally</button>
+                  </div>
+                </div>
+                <div class="compact-amount-field mt-1">
+                  <span class="compact-prefix">₹</span>
+                  <input type="number" id="snapMyShare" class="compact-num-input tabular" placeholder="0.00" step="any"
+                    inputmode="decimal">
+                  <button type="button" id="clearMyShareBtn" class="btn-clear-field" title="Clear">✕</button>
+                </div>
+              </div>
+
+              <!-- Breakdown Table -->
+              <div id="splitBreakdownCard" class="breakdown-panel">
+                <div class="breakdown-header">
+                  <span class="text-xs text-muted uppercase-label">Breakdown</span>
+                  <span id="summaryFriendsTotal" class="breakdown-total tabular">₹0.00 to collect</span>
+                </div>
+                <div id="summaryBreakdownList" class="breakdown-rows"></div>
               </div>
             </div>
-            <div class="compact-amount-field mt-1">
-              <span class="compact-prefix">₹</span>
-              <input type="number" id="snapMyShare" class="compact-num-input tabular" placeholder="0.00" step="any" inputmode="decimal">
-              <button type="button" id="clearMyShareBtn" class="btn-clear-field" title="Clear">✕</button>
-            </div>
-          </div>
-
-          <!-- Breakdown Table -->
-          <div id="splitBreakdownCard" class="breakdown-panel">
-            <div class="breakdown-header">
-              <span class="text-xs text-muted uppercase-label">Breakdown</span>
-              <span id="summaryFriendsTotal" class="breakdown-total tabular">₹0.00 to collect</span>
-            </div>
-            <div id="summaryBreakdownList" class="breakdown-rows"></div>
           </div>
 
           <div class="modal-footer mt-4">
@@ -542,9 +663,12 @@
           <div class="form-group">
             <label class="form-label">Group</label>
             <div class="segmented-bar">
-              <label class="seg-option active"><input type="radio" name="relationship" value="Roommate" checked><span>Roommate</span></label>
-              <label class="seg-option"><input type="radio" name="relationship" value="Classmate"><span>Classmate</span></label>
-              <label class="seg-option"><input type="radio" name="relationship" value="Friend"><span>Friend</span></label>
+              <label class="seg-option active"><input type="radio" name="relationship" value="Roommate"
+                  checked><span>Roommate</span></label>
+              <label class="seg-option"><input type="radio" name="relationship"
+                  value="Classmate"><span>Classmate</span></label>
+              <label class="seg-option"><input type="radio" name="relationship"
+                  value="Friend"><span>Friend</span></label>
             </div>
           </div>
           <div class="modal-footer mt-3">
@@ -579,9 +703,12 @@
           <div class="form-group">
             <label class="form-label">Group</label>
             <div class="segmented-bar">
-              <label class="seg-option" id="editRelRoommate"><input type="radio" name="editRelationship" value="Roommate"><span>Roommate</span></label>
-              <label class="seg-option" id="editRelClassmate"><input type="radio" name="editRelationship" value="Classmate"><span>Classmate</span></label>
-              <label class="seg-option" id="editRelFriend"><input type="radio" name="editRelationship" value="Friend"><span>Friend</span></label>
+              <label class="seg-option" id="editRelRoommate"><input type="radio" name="editRelationship"
+                  value="Roommate"><span>Roommate</span></label>
+              <label class="seg-option" id="editRelClassmate"><input type="radio" name="editRelationship"
+                  value="Classmate"><span>Classmate</span></label>
+              <label class="seg-option" id="editRelFriend"><input type="radio" name="editRelationship"
+                  value="Friend"><span>Friend</span></label>
             </div>
           </div>
           <div class="modal-footer flex gap-2 mt-3">
@@ -604,7 +731,8 @@
           <div id="settlePersonInfo" class="grouped-list"></div>
           <div class="form-group mt-3">
             <label for="settleAmount" class="form-label">Amount received (₹)</label>
-            <input type="number" id="settleAmount" class="form-input input-lg tabular" step="any" required inputmode="decimal">
+            <input type="number" id="settleAmount" class="form-input input-lg tabular" step="any" required
+              inputmode="decimal">
           </div>
           <div class="form-group">
             <label for="settleNotes" class="form-label">Note (Optional)</label>
@@ -643,7 +771,8 @@
 
           <div class="form-group">
             <label for="repaymentAmountInput" class="form-label">Amount to credit (₹)</label>
-            <input type="number" id="repaymentAmountInput" class="form-input tabular" step="any" required inputmode="decimal">
+            <input type="number" id="repaymentAmountInput" class="form-input tabular" step="any" required
+              inputmode="decimal">
           </div>
 
           <div class="form-group">
@@ -668,7 +797,7 @@
           <button type="button" id="closeUpdateModalBtn" class="btn-close">✕</button>
         </div>
         <div>
-          <div class="row-title" id="updateVersionTitle">WhoseTab v1.1.0</div>
+          <div class="row-title" id="updateVersionTitle">WhoseTab v1.1.1</div>
           <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Improvements and bug fixes.</div>
 
           <div id="updateProgressContainer" class="mt-3 hidden">
@@ -679,7 +808,8 @@
           </div>
 
           <div class="modal-footer mt-4">
-            <button type="button" id="downloadUpdateBtn" class="btn btn-primary btn-block btn-lg">Install Update</button>
+            <button type="button" id="downloadUpdateBtn" class="btn btn-primary btn-block btn-lg">Install
+              Update</button>
           </div>
         </div>
       </div>
@@ -689,4 +819,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>

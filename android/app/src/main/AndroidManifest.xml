@@ -51,6 +51,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Translucent bottom-right Quick-Add Popup Activity (renders over apps with HIDE_OVERLAY_WINDOWS) -->
+        <activity
+            android:name=".QuickAddPopupActivity"
+            android:exported="false"
+            android:theme="@style/Theme.WhoseTab.QuickPopup"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:finishOnTaskLaunch="true" />
+
         <!-- Persistent Foreground Service keeping scanner active & showing status bar icon -->
         <service
             android:name=".ScannerForegroundService"

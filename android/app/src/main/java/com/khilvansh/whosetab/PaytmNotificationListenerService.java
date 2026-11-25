@@ -29,7 +29,7 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
     private static final String TAG = "WhoseTab";
     public static final String PREFS_NAME = "whosetab_prefs";
     public static final String KEY_OPEN_DELAY = "paytm_open_delay_ms";
-    private static final String CHANNEL_ID_ALERTS = "paytm_snap_alerts";
+    private static final String CHANNEL_ID_ALERTS = "paytm_snap_alerts_v2";
 
     // Rate patterns like ₹17,867/g, ₹100/mo, etc.
     private static final Pattern PER_UNIT_RATE_PATTERN = Pattern.compile(
@@ -347,6 +347,7 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
             }
         }
 
+        recipient = recipient.replaceAll("\\s+", " ").trim();
         if (recipient.length() > 40) recipient = recipient.substring(0, 40).trim();
 
         String txnId = "";
@@ -561,12 +562,31 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
 
         handler.postDelayed(() -> {
             if ("overlay".equals(mode) && canOverlay) {
-                // Show sleek compact floating Quick-Add toast at bottom-right over Paytm
-                PaymentOverlayManager.showPaymentToast(PaytmNotificationListenerService.this, data);
-                return;
+                // Launch translucent bottom-right floating Activity card so it appears even over Paytm (HIDE_OVERLAY_WINDOWS)
+                try {
+                    Intent popupIntent = QuickAddPopupActivity.buildIntent(this, data);
+                    PendingIntent popupPi = PendingIntent.getActivity(
+                        this,
+                        (int) ((System.currentTimeMillis() + 7) & 0xFFFFFF),
+                        popupIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+                    );
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        ActivityOptions options = ActivityOptions.makeBasic();
+                        options.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                        popupPi.send(this, 0, null, null, null, null, options.toBundle());
+                    } else {
+                        startActivity(popupIntent);
+                    }
+                    return;
+                } catch (Exception e) {
+                    Log.w(TAG, "QuickAddPopupActivity launch fallback to WindowManager overlay: " + e.getMessage());
+                    PaymentOverlayManager.showPaymentToast(PaytmNotificationListenerService.this, data);
+                    return;
+                }
             }
 
-            // Fallback or explicit "open_app" mode: bring MainActivity to foreground
+            // Explicit "open_app" mode or fallback when overlay permission is missing
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     ActivityOptions options = ActivityOptions.makeBasic();
