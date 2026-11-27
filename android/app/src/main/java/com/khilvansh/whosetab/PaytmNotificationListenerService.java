@@ -1,6 +1,7 @@
 package com.khilvansh.whosetab;
 
 import android.app.ActivityOptions;
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -13,6 +14,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.Process;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
@@ -200,7 +202,9 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
         if (vpaMatcher.find() && vpaMatcher.group(1) != null) {
             return vpaMatcher.group(1).trim();
         }
-        Matcher phoneMatcher = HANDLE_PHONE_PATTERN.matcher(text);
+        // Strip transaction reference/order/account numbers so they aren't misread as phone numbers
+        String stripped = text.replaceAll("(?i)\\b(?:ref(?:\\s*no)?|txn(?:\\s*id)?|utr|rrn|order(?:\\s*id)?|a/c|acct|account|card)[:\\s#-]*[0-9]{6,}", " ");
+        Matcher phoneMatcher = HANDLE_PHONE_PATTERN.matcher(stripped);
         if (phoneMatcher.find() && phoneMatcher.group(1) != null) {
             return phoneMatcher.group(1).trim();
         }
@@ -421,7 +425,11 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
 
         String lower = fullBody.toLowerCase(Locale.US);
         String category = "General";
-        if (lower.contains("grocer") || lower.contains("kirana") || lower.contains("mart") || lower.contains("milk") || lower.contains("vegetable") || lower.contains("zepto") || lower.contains("blinkit")) {
+        if (lower.contains("amazon") || lower.contains("flipkart") || lower.contains("myntra")
+                || lower.contains("meesho") || lower.contains("ajio") || lower.contains("nykaa")
+                || lower.contains("delivery") || lower.contains("parcel") || lower.contains("delhivery")) {
+            category = "Shopping";
+        } else if (lower.contains("grocer") || lower.contains("kirana") || lower.contains("mart") || lower.contains("milk") || lower.contains("vegetable") || lower.contains("zepto") || lower.contains("blinkit")) {
             category = "Groceries";
         } else if (lower.contains("food") || lower.contains("canteen") || lower.contains("cafe") || lower.contains("restaurant") || lower.contains("zomato") || lower.contains("swiggy") || lower.contains("sweets")) {
             category = "FoodDining";
@@ -661,6 +669,10 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
 
         handler.postDelayed(() -> {
             if ("overlay".equals(mode) && canOverlay) {
+                if (!isDeviceUnlockedAndInteractive(this)) {
+                    ScannerForegroundService.schedulePopupOnUnlock(PaytmNotificationListenerService.this, data);
+                    return;
+                }
                 try {
                     Intent popupIntent = QuickAddPopupActivity.buildIntent(this, data);
                     PendingIntent popupPi = PendingIntent.getActivity(
@@ -684,6 +696,11 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
                 }
             }
 
+            if (!isDeviceUnlockedAndInteractive(this)) {
+                ScannerForegroundService.schedulePopupOnUnlock(PaytmNotificationListenerService.this, data);
+                return;
+            }
+
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     ActivityOptions options = ActivityOptions.makeBasic();
@@ -702,6 +719,16 @@ public class PaytmNotificationListenerService extends NotificationListenerServic
                 } catch (Exception ignored) {}
             }
         }, delayMs);
+    }
+
+    private static boolean isDeviceUnlockedAndInteractive(Context context) {
+        if (context == null) return false;
+        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        if (pm != null && !pm.isInteractive()) {
+            return false;
+        }
+        KeyguardManager km = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        return km == null || !km.isKeyguardLocked();
     }
 
     private void createAlertChannel() {

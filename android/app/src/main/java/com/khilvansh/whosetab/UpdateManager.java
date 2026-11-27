@@ -35,9 +35,9 @@ public class UpdateManager {
     public static String getCurrentVersion(Context context) {
         try {
             PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
-            return pInfo.versionName != null ? pInfo.versionName : "1.2.0";
+            return pInfo.versionName != null ? pInfo.versionName : "1.3.0";
         } catch (Exception e) {
-            return "1.2.0";
+            return "1.3.0";
         }
     }
 

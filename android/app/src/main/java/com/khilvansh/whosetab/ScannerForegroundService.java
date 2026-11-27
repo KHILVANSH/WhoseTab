@@ -1,21 +1,27 @@
 package com.khilvansh.whosetab;
 
+import android.app.ActivityOptions;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
+import org.json.JSONObject;
 
 public class ScannerForegroundService extends Service {
 
@@ -23,11 +29,27 @@ public class ScannerForegroundService extends Service {
     public static final String CHANNEL_ID_STATUS = "paytm_scanner_status";
     public static final int STATUS_NOTIFICATION_ID = 1001;
     public static final String ACTION_REFRESH_STATUS = "com.khilvansh.whosetab.REFRESH_STATUS";
+    public static final String ACTION_DEFER_UNLOCK_POPUP = "com.khilvansh.whosetab.DEFER_UNLOCK_POPUP";
     private static volatile boolean serviceRunning = false;
     private static volatile Boolean lastNotifAccessState = null;
 
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private BroadcastReceiver unlockReceiver = null;
+
     public static boolean isRunning() {
         return serviceRunning;
+    }
+
+    public static void schedulePopupOnUnlock(Context context, JSONObject data) {
+        if (context == null || data == null) return;
+        PaymentDataStore.setPendingUnlockPopup(context, data);
+        try {
+            Intent intent = new Intent(context, ScannerForegroundService.class);
+            intent.setAction(ACTION_DEFER_UNLOCK_POPUP);
+            ContextCompat.startForegroundService(context.getApplicationContext(), intent);
+        } catch (Exception e) {
+            Log.e(TAG, "Unable to schedule unlock popup: " + e.getMessage());
+        }
     }
 
     public static void ensureRunning(Context context) {
@@ -77,6 +99,10 @@ public class ScannerForegroundService extends Service {
             }
         }
 
+        if (intent != null && ACTION_DEFER_UNLOCK_POPUP.equals(intent.getAction())) {
+            registerUnlockReceiverIfNeeded();
+        }
+
         // Request Android to bind NotificationListenerService if granted but disconnected
         try {
             if (hasAccess && !PaytmNotificationListenerService.isRunning() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -89,10 +115,74 @@ public class ScannerForegroundService extends Service {
         return START_STICKY;
     }
 
+    private synchronized void registerUnlockReceiverIfNeeded() {
+        if (unlockReceiver != null) return;
+        unlockReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context ctx, Intent intent) {
+                if (intent != null && Intent.ACTION_USER_PRESENT.equals(intent.getAction())) {
+                    unregisterUnlockReceiver();
+                    JSONObject pending = PaymentDataStore.consumePendingUnlockPopup(ScannerForegroundService.this);
+                    if (pending != null) {
+                        mainHandler.postDelayed(() -> showUnlockedQuickPopup(pending), 350);
+                    }
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter(Intent.ACTION_USER_PRESENT);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(unlockReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                registerReceiver(unlockReceiver, filter);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to register ACTION_USER_PRESENT receiver: " + e.getMessage());
+            unlockReceiver = null;
+        }
+    }
+
+    private synchronized void unregisterUnlockReceiver() {
+        if (unlockReceiver != null) {
+            try {
+                unregisterReceiver(unlockReceiver);
+            } catch (Exception ignored) {}
+            unlockReceiver = null;
+        }
+    }
+
+    private void showUnlockedQuickPopup(JSONObject data) {
+        if (MainActivity.isActivityForeground) {
+            boolean isRepay = "repayment".equals(data.optString("type", ""));
+            MainActivity.dispatchFromServiceIfVisible(data, isRepay);
+            return;
+        }
+        try {
+            Intent popupIntent = QuickAddPopupActivity.buildIntent(this, data);
+            PendingIntent popupPi = PendingIntent.getActivity(
+                this,
+                (int) ((System.currentTimeMillis() + 17) & 0xFFFFFF),
+                popupIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+            );
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ActivityOptions options = ActivityOptions.makeBasic();
+                options.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                popupPi.send(this, 0, null, null, null, null, options.toBundle());
+            } else {
+                startActivity(popupIntent);
+            }
+        } catch (Exception e) {
+            PaymentOverlayManager.showPaymentToast(this, data);
+        }
+    }
+
     @Override
     public void onDestroy() {
         serviceRunning = false;
         lastNotifAccessState = null;
+        unregisterUnlockReceiver();
+        mainHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
 

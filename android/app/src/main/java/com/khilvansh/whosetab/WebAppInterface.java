@@ -57,6 +57,51 @@ public class WebAppInterface {
     }
 
     @JavascriptInterface
+    public void requestNearbyShops() {
+        if (activity instanceof MainActivity) {
+            ((MainActivity) activity).fetchNearbyShopsWithLocation();
+        }
+    }
+
+    @JavascriptInterface
+    public void searchShopsOnline(String query, double lat, double lng) {
+        if (activity instanceof MainActivity) {
+            ((MainActivity) activity).searchShopsOnline(query, lat, lng);
+        }
+    }
+
+    @JavascriptInterface
+    public void openGoogleMaps(String query, double lat, double lng) {
+        activity.runOnUiThread(() -> {
+            try {
+                String encoded = Uri.encode(query != null ? query : "");
+                Uri uri;
+                if (lat != 0.0 || lng != 0.0) {
+                    String qPart = encoded.isEmpty() ? (lat + "," + lng) : encoded;
+                    uri = Uri.parse("geo:" + lat + "," + lng + "?q=" + qPart);
+                } else if (!encoded.isEmpty()) {
+                    uri = Uri.parse("geo:0,0?q=" + encoded);
+                } else {
+                    uri = Uri.parse("https://maps.google.com");
+                }
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                intent.setPackage("com.google.android.apps.maps");
+                if (intent.resolveActivity(activity.getPackageManager()) == null) {
+                    intent.setPackage(null);
+                }
+                activity.startActivity(intent);
+            } catch (Exception e) {
+                try {
+                    String webUrl = (lat != 0.0 || lng != 0.0)
+                        ? "https://www.google.com/maps/search/?api=1&query=" + lat + "," + lng
+                        : "https://www.google.com/maps/search/?api=1&query=" + Uri.encode(query != null ? query : "");
+                    activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(webUrl)));
+                } catch (Exception ignored) {}
+            }
+        });
+    }
+
+    @JavascriptInterface
     public String getRecentDetections() {
         JSONArray arr = PaymentDataStore.getRecentDetections(activity);
         return arr != null ? arr.toString() : "[]";

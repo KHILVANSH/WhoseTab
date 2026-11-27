@@ -63,6 +63,17 @@
               </svg>
               <span>Recent Payments</span>
             </button>
+            <button type="button" class="menu-item" id="menuSharePendingSummary" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+              </svg>
+              <span>Share Pending Summary</span>
+            </button>
             <button type="button" class="menu-item" id="menuAddContact" role="menuitem">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -350,7 +361,7 @@
             <div class="grouped-list settings-group">
               <div class="settings-row">
                 <div class="settings-row-info">
-                  <span class="row-title">Version <span id="appVersionDisplay" class="text-muted">v1.2.0</span></span>
+                  <span class="row-title">Version <span id="appVersionDisplay" class="text-muted">v1.3.0</span></span>
                   <span class="row-subtitle" id="updateStatusNotice">Stored locally on device</span>
                 </div>
                 <button type="button" id="checkForUpdatesBtn" class="btn-status-action">Check</button>
@@ -684,7 +695,26 @@
               </div>
 
               <div class="form-group mt-3">
-                <input type="text" id="snapTitle" class="form-input" placeholder="Description or payment name">
+                <div class="title-location-row">
+                  <input type="text" id="snapTitle" class="form-input" placeholder="Description or shop name">
+                  <button type="button" id="openLocationPickerBtn" class="btn-location-pin" title="Pick shop location"
+                    aria-label="Pick shop location">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                      <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                  </button>
+                </div>
+                <div id="selectedLocationChip" class="selected-location-chip hidden">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                  </svg>
+                  <span id="selectedLocationText" class="loc-chip-text">Shop Location</span>
+                  <button type="button" id="clearSelectedLocationBtn" class="alias-chip-remove" aria-label="Remove location">✕</button>
+                </div>
               </div>
 
               <!-- Single-line Scrollable Category Strip -->
@@ -692,6 +722,8 @@
                 <div class="category-strip">
                   <label class="cat-pill"><input type="radio" name="category" value="General"
                       checked><span>General</span></label>
+                  <label class="cat-pill"><input type="radio" name="category"
+                      value="Shopping"><span>Shopping</span></label>
                   <label class="cat-pill"><input type="radio" name="category"
                       value="Groceries"><span>Groceries</span></label>
                   <label class="cat-pill"><input type="radio" name="category" value="FoodDining"><span>Dining</span></label>
@@ -891,6 +923,7 @@
           <div class="repayment-summary-box">
             <div class="repayment-amount-display tabular" id="repaymentAmountDisplay">₹0.00</div>
             <div class="text-xs text-muted" id="repaymentSourceDetail">Received from Sender</div>
+            <div id="repaymentGuessBadge" class="repayment-guess-badge hidden">Exact balance match</div>
             <div class="mt-2">
               <button type="button" id="repaymentNewContactBtn" class="btn-inline-chip">+ Save Sender as Contact</button>
             </div>
@@ -927,6 +960,37 @@
       </div>
     </div>
 
+    <!-- SHEET: GOOGLE MAPS SHOP LOCATION PICKER -->
+    <div id="shopLocationModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-sheet">
+        <div class="sheet-handle"></div>
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow-tag">Shop Directory</span>
+            <h3 class="sheet-title mt-1">Shop Location</h3>
+          </div>
+          <button type="button" id="closeShopLocationModalBtn" class="btn-close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="search-field-wrap">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="search" id="shopSearchInput" class="search-input" placeholder="Search shop, canteen, or area">
+        </div>
+
+        <div class="shop-picker-actions mt-2">
+          <button type="button" id="shopUseGpsBtn" class="btn-inline-chip">Find Nearby</button>
+          <button type="button" id="shopOpenGmapsBtn" class="btn-inline-chip">Open Google Maps</button>
+        </div>
+
+        <div id="shopLocationStatus" class="text-xs text-muted mt-2 hidden"></div>
+        <div id="shopResultsList" class="grouped-list mt-3 shop-results-list"></div>
+      </div>
+    </div>
+
     <!-- SHEET: APP UPDATE -->
     <div id="updateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal-sheet">
@@ -936,7 +1000,7 @@
           <button type="button" id="closeUpdateModalBtn" class="btn-close">✕</button>
         </div>
         <div>
-          <div class="row-title" id="updateVersionTitle">WhoseTab v1.2.0</div>
+          <div class="row-title" id="updateVersionTitle">WhoseTab v1.3.0</div>
           <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Improvements and bug fixes.</div>
 
           <div id="updateProgressContainer" class="mt-3 hidden">

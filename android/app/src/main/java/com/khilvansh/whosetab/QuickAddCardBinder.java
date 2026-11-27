@@ -10,39 +10,89 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
  * Shared binder for the compact bottom-right Quick-Add card used by both
- * QuickAddPopupActivity (works above apps with HIDE_OVERLAY_WINDOWS like Paytm)
- * and PaymentOverlayManager (WindowManager preview overlay).
+ * QuickAddPopupActivity and PaymentOverlayManager.
  */
 public class QuickAddCardBinder {
 
     private static final String TAG = "WhoseTab";
     private static final long AUTO_HIDE_MS = 25000L;
 
+    private static final Set<String> KNOWN_COMMERCIAL_MERCHANTS = new HashSet<>(Arrays.asList(
+        "amazon", "amazonpay", "amazonindia", "amazonseller", "flipkart", "myntra",
+        "meesho", "ajio", "nykaa", "swiggy", "zomato", "blinkit", "zepto", "instamart",
+        "bigbasket", "uber", "ola", "rapido", "irctc", "paytm", "googlepay", "phonepe",
+        "paytmmoney", "merchant", "someone"
+    ));
+
+    private static final Set<String> GENERIC_ALIAS_TOKENS = new HashSet<>(Arrays.asList(
+        "pay", "upi", "bank", "hdfc", "sbi", "icici", "axis", "kotak", "paytm",
+        "amazon", "merchant", "payment", "transfer", "india", "limited", "ltd", "pvt"
+    ));
+
     public interface DismissCallback {
         void onDismissRequested();
+    }
+
+    private static void animateOutAndDismiss(Context context, View root, boolean slideLeft, DismissCallback onDismiss) {
+        if (root == null) {
+            if (onDismiss != null) onDismiss.onDismissRequested();
+            return;
+        }
+        float distance = root.getWidth() > 0 ? root.getWidth() + dpToPx(context, 28) : dpToPx(context, 340);
+        float targetX = slideLeft ? -distance : distance;
+        root.animate().cancel();
+        root.animate()
+            .translationX(targetX)
+            .alpha(0f)
+            .setDuration(210L)
+            .setInterpolator(new AccelerateInterpolator())
+            .withEndAction(() -> {
+                if (onDismiss != null) onDismiss.onDismissRequested();
+            })
+            .start();
     }
 
     public static void bind(Context context, View root, JSONObject data, DismissCallback onDismiss) {
         if (context == null || root == null || data == null) return;
 
+        // Smooth entrance animation from right edge
+        root.animate().cancel();
+        root.setTranslationX(dpToPx(context, 48));
+        root.setAlpha(0f);
+        root.animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(220L)
+            .setInterpolator(new DecelerateInterpolator())
+            .start();
+
+        final AtomicBoolean dismissedFlag = new AtomicBoolean(false);
         final Handler timerHandler = new Handler(Looper.getMainLooper());
         final Runnable hideTask = () -> {
-            if (onDismiss != null) onDismiss.onDismissRequested();
+            if (dismissedFlag.compareAndSet(false, true)) {
+                animateOutAndDismiss(context, root, false, onDismiss);
+            }
         };
         final Runnable resetTimer = () -> {
+            if (dismissedFlag.get()) return;
             timerHandler.removeCallbacks(hideTask);
             timerHandler.postDelayed(hideTask, AUTO_HIDE_MS);
         };
@@ -99,6 +149,7 @@ public class QuickAddCardBinder {
                 quickAddBtn.setText("Split in App");
             } else {
                 contactsContainer.setVisibility(View.VISIBLE);
+                chipsList.removeAllViews();
                 for (int i = 0; i < synced.length(); i++) {
                     JSONObject p = synced.optJSONObject(i);
                     if (p == null) continue;
@@ -162,16 +213,18 @@ public class QuickAddCardBinder {
         }
 
         closeBtn.setOnClickListener(v -> {
-            timerHandler.removeCallbacks(hideTask);
+            if (!dismissedFlag.compareAndSet(false, true)) return;
+            timerHandler.removeCallbacksAndMessages(null);
             dismissPayment(context, data, isRepayment);
-            if (onDismiss != null) onDismiss.onDismissRequested();
+            animateOutAndDismiss(context, root, false, onDismiss);
         });
 
         openAppBtn.setOnClickListener(v -> {
-            timerHandler.removeCallbacks(hideTask);
+            if (!dismissedFlag.compareAndSet(false, true)) return;
+            timerHandler.removeCallbacksAndMessages(null);
             if (isRepayment) {
                 dismissPayment(context, data, true);
-                if (onDismiss != null) onDismiss.onDismissRequested();
+                animateOutAndDismiss(context, root, false, onDismiss);
             } else {
                 if (onDismiss != null) onDismiss.onDismissRequested();
                 launchMainAppWithData(context, data, false);
@@ -181,12 +234,14 @@ public class QuickAddCardBinder {
         quickAddBtn.setOnClickListener(v -> {
             timerHandler.removeCallbacks(hideTask);
             if (isRepayment) {
+                if (!dismissedFlag.compareAndSet(false, true)) return;
                 if (onDismiss != null) onDismiss.onDismissRequested();
                 launchMainAppWithData(context, data, true);
                 return;
             }
 
             if (contactObjects.isEmpty()) {
+                if (!dismissedFlag.compareAndSet(false, true)) return;
                 if (onDismiss != null) onDismiss.onDismissRequested();
                 launchMainAppWithData(context, data, false);
                 return;
@@ -197,6 +252,9 @@ public class QuickAddCardBinder {
                 resetTimer.run();
                 return;
             }
+
+            if (!dismissedFlag.compareAndSet(false, true)) return;
+            timerHandler.removeCallbacksAndMessages(null);
 
             try {
                 int numPeople = selectedPersonIds.size();
@@ -245,7 +303,6 @@ public class QuickAddCardBinder {
                 PaymentDataStore.addQueuedQuickExpense(context, expenseObj);
                 dismissPayment(context, data, false);
 
-                // Sync live immediately if MainActivity WebView is loaded in memory
                 MainActivity.notifyQuickExpensesUpdated();
 
                 String namesJoined = android.text.TextUtils.join(", ", chosenNames);
@@ -258,21 +315,34 @@ public class QuickAddCardBinder {
                 Log.e(TAG, "Error queueing quick expense", e);
             }
 
-            if (onDismiss != null) onDismiss.onDismissRequested();
+            animateOutAndDismiss(context, root, false, onDismiss);
         });
 
         final float[] downX = new float[1];
         root.setOnTouchListener((v, event) -> {
+            if (dismissedFlag.get()) return false;
             resetTimer.run();
-            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
                 downX[0] = event.getRawX();
-            } else if (event.getAction() == MotionEvent.ACTION_UP) {
-                float deltaX = event.getRawX() - downX[0];
-                if (Math.abs(deltaX) > dpToPx(context, 90)) {
-                    timerHandler.removeCallbacks(hideTask);
-                    dismissPayment(context, data, isRepayment);
-                    if (onDismiss != null) onDismiss.onDismissRequested();
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                float dx = event.getRawX() - downX[0];
+                if (Math.abs(dx) > dpToPx(context, 8)) {
+                    root.setTranslationX(dx);
+                    float progress = Math.min(1f, Math.abs(dx) / dpToPx(context, 180));
+                    root.setAlpha(Math.max(0.25f, 1f - progress * 0.7f));
+                }
+            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                float dx = event.getRawX() - downX[0];
+                if (Math.abs(dx) > dpToPx(context, 75)) {
+                    if (dismissedFlag.compareAndSet(false, true)) {
+                        timerHandler.removeCallbacksAndMessages(null);
+                        dismissPayment(context, data, isRepayment);
+                        animateOutAndDismiss(context, root, dx < 0, onDismiss);
+                    }
                     return true;
+                } else {
+                    root.animate().translationX(0f).alpha(1f).setDuration(160L).setInterpolator(new DecelerateInterpolator()).start();
                 }
             }
             return false;
@@ -283,12 +353,14 @@ public class QuickAddCardBinder {
         if (contacts == null || contacts.length() == 0) return null;
         String cp = rawCounterparty != null ? rawCounterparty.trim() : "";
         String handle = rawHandle != null ? rawHandle.trim() : "";
-        String combinedRaw = (cp + " " + handle).trim().toLowerCase();
-        String combinedDigits = combinedRaw.replaceAll("[^0-9]", "");
+        String combinedRaw = (cp + " " + handle).trim().toLowerCase(Locale.US);
+        String cleanCp = cp.toLowerCase(Locale.US).replaceAll("[^a-z0-9]", "");
+        String cleanHandle = handle.toLowerCase(Locale.US).replaceAll("[^a-z0-9]", "");
 
-        // 1. Exact phone 10-digit suffix match
-        if (combinedDigits.length() >= 10) {
-            String last10 = combinedDigits.substring(combinedDigits.length() - 10);
+        // 1. Exact phone 10-digit suffix match (only if handle itself is phone/VPA-digits)
+        String handleDigits = handle.replaceAll("[^0-9]", "");
+        if (handleDigits.length() >= 10) {
+            String last10 = handleDigits.substring(handleDigits.length() - 10);
             for (int i = 0; i < contacts.length(); i++) {
                 JSONObject c = contacts.optJSONObject(i);
                 if (c == null) continue;
@@ -319,32 +391,34 @@ public class QuickAddCardBinder {
             }
         }
 
-        // 3. UPI ID match
+        // 3. Exact UPI ID match
         for (int i = 0; i < contacts.length(); i++) {
             JSONObject c = contacts.optJSONObject(i);
             if (c == null) continue;
-            String upi = c.optString("upi", "").toLowerCase().trim();
-            if (!upi.isEmpty() && (combinedRaw.contains(upi) || (!handle.isEmpty() && upi.contains(handle.toLowerCase())))) {
+            String upi = c.optString("upi", "").toLowerCase(Locale.US).trim();
+            if (upi.length() >= 5 && (combinedRaw.contains(upi) || (!handle.isEmpty() && upi.equalsIgnoreCase(handle)))) {
                 return c.optString("id", "");
             }
         }
 
-        String cleanCp = cp.toLowerCase().replaceAll("[^a-z0-9]", "");
-        String cleanHandle = handle.toLowerCase().replaceAll("[^a-z0-9]", "");
+        // Never fuzzy-match well-known e-commerce / delivery / commercial brands to personal contacts
+        if (KNOWN_COMMERCIAL_MERCHANTS.contains(cleanCp)) {
+            return null;
+        }
 
-        // 4. Learned payment aliases match
+        // 4. Learned payment aliases match (requires >= 4 chars & non-generic token)
         for (int i = 0; i < contacts.length(); i++) {
             JSONObject c = contacts.optJSONObject(i);
             if (c == null) continue;
             JSONArray aliases = c.optJSONArray("aliases");
             if (aliases == null) continue;
             for (int j = 0; j < aliases.length(); j++) {
-                String alias = aliases.optString(j, "").trim().toLowerCase();
-                if (alias.isEmpty()) continue;
+                String alias = aliases.optString(j, "").trim().toLowerCase(Locale.US);
                 String cleanAlias = alias.replaceAll("[^a-z0-9]", "");
-                if (!cleanAlias.isEmpty() && (cleanAlias.equals(cleanCp) || cleanAlias.equals(cleanHandle)
-                        || (cleanCp.length() >= 3 && cleanCp.contains(cleanAlias))
-                        || combinedRaw.contains(alias))) {
+                if (cleanAlias.length() < 4 || GENERIC_ALIAS_TOKENS.contains(cleanAlias) || KNOWN_COMMERCIAL_MERCHANTS.contains(cleanAlias)) {
+                    continue;
+                }
+                if (cleanAlias.equals(cleanCp) || (!cleanHandle.isEmpty() && cleanAlias.equals(cleanHandle))) {
                     return c.optString("id", "");
                 }
             }
@@ -359,18 +433,18 @@ public class QuickAddCardBinder {
             if (c == null) continue;
             String id = c.optString("id", "");
             String name = c.optString("name", "");
-            String cleanName = name.toLowerCase().replaceAll("[^a-z0-9]", "");
-            if (cleanName.isEmpty()) continue;
+            String cleanName = name.toLowerCase(Locale.US).replaceAll("[^a-z0-9]", "");
+            if (cleanName.length() < 3) continue;
 
-            if (cleanName.equals(cleanCp) || cleanCp.contains(cleanName) || cleanName.contains(cleanCp)) {
+            if (cleanName.equals(cleanCp)) {
                 return id;
             }
-            String first = name.toLowerCase().split("\\s+")[0].replaceAll("[^a-z0-9]", "");
-            if (first.length() >= 3 && (cleanCp.contains(first) || first.contains(cleanCp))) {
+            String first = name.toLowerCase(Locale.US).split("\\s+")[0].replaceAll("[^a-z0-9]", "");
+            if (first.length() >= 4 && !GENERIC_ALIAS_TOKENS.contains(first) && cleanCp.equals(first)) {
                 return id;
             }
             String phoneticName = cleanName.replace("h", "");
-            if (phoneticName.length() >= 3 && (phoneticName.equals(phoneticCp) || phoneticCp.contains(phoneticName))) {
+            if (phoneticName.length() >= 4 && phoneticName.equals(phoneticCp)) {
                 return id;
             }
         }

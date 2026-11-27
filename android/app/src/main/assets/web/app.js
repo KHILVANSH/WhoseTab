@@ -6,6 +6,20 @@
 const STORAGE_KEY = 'whosetab_ledger_v1';
 const THEME_KEY = 'whosetab_theme_preference';
 const PURGE_V120_KEY = 'whosetab_purged_entries_v120';
+const CLEAN_ALIASES_V130_KEY = 'whosetab_clean_aliases_v130';
+
+const COMMERCIAL_MERCHANTS = new Set([
+  'amazon', 'amazonpay', 'amazonindia', 'amazonin', 'flipkart', 'myntra', 'meesho',
+  'ajio', 'nykaa', 'swiggy', 'zomato', 'blinkit', 'zepto', 'instamart', 'bigbasket',
+  'uber', 'ola', 'rapido', 'irctc', 'bookmyshow', 'redbus', 'makemytrip', 'goibibo',
+  'paytm', 'phonepe', 'gpay', 'googlepay', 'bhim', 'razorpay', 'cashfree', 'payu',
+  'jio', 'airtel', 'vodafone', 'bsnl', 'delhivery', 'bluedart', 'ecomexpress', 'xpressbees'
+]);
+
+const GENERIC_ALIAS_TOKENS = new Set([
+  'merchant', 'someone', 'purchase', 'payment', 'upi', 'bank', 'pay', 'transfer',
+  'wallet', 'cash', 'card', 'order', 'delivery', 'store', 'shop', 'mart', 'canteen', 'paid'
+]);
 
 class WhoseTabApp {
   constructor() {
@@ -23,6 +37,15 @@ class WhoseTabApp {
     this.activityFilter = 'all'; // 'all' | 'lent' | 'borrowed' | 'repayment'
     this.activeActionPersonId = null;
     this.activeDetailItem = null;
+    this.currentTabIndex = 0;
+    this.currentEntryLocation = null;
+    this.lastGeoLat = 0;
+    this.lastGeoLng = 0;
+    this.shopSearchTimer = null;
+    this.nearbyShopsCache = [];
+    this.onlineShopResults = [];
+    this.modalCloseTimers = new WeakMap();
+    this.toastCloseTimer = null;
 
     this.ledger = this.loadLedger();
 
@@ -46,6 +69,7 @@ class WhoseTabApp {
       people: [],
       expenses: [],
       settlements: [],
+      savedShops: [],
       settings: { theme: 'dark' }
     };
 
@@ -62,6 +86,7 @@ class WhoseTabApp {
             })),
             expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
             settlements: Array.isArray(parsed.settlements) ? parsed.settlements : [],
+            savedShops: Array.isArray(parsed.savedShops) ? parsed.savedShops : [],
             settings: parsed.settings || { theme: 'dark' }
           };
         }
@@ -84,6 +109,28 @@ class WhoseTabApp {
       if (window.AndroidBridge && window.AndroidBridge.clearStalePaymentCache) {
         try { window.AndroidBridge.clearStalePaymentCache(); } catch (e) {}
       }
+    }
+
+    // One-time v1.3.0 alias sanitization: prune short (<4 chars), generic, or commercial merchant aliases
+    if (!localStorage.getItem(CLEAN_ALIASES_V130_KEY)) {
+      let dirty = false;
+      loaded.people.forEach(p => {
+        if (!Array.isArray(p.aliases) || p.aliases.length === 0) return;
+        const filtered = p.aliases.filter(alias => {
+          const na = String(alias || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!na || na.length < 4) return false;
+          if (GENERIC_ALIAS_TOKENS.has(na) || COMMERCIAL_MERCHANTS.has(na)) return false;
+          return true;
+        });
+        if (filtered.length !== p.aliases.length) {
+          p.aliases = filtered;
+          dirty = true;
+        }
+      });
+      try {
+        if (dirty) localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+        localStorage.setItem(CLEAN_ALIASES_V130_KEY, 'true');
+      } catch (e) {}
     }
 
     return loaded;
@@ -174,6 +221,7 @@ class WhoseTabApp {
       headerMoreBtn: document.getElementById('headerMoreBtn'),
       headerOverflowMenu: document.getElementById('headerOverflowMenu'),
       menuRecentDetections: document.getElementById('menuRecentDetections'),
+      menuSharePendingSummary: document.getElementById('menuSharePendingSummary'),
       menuAddContact: document.getElementById('menuAddContact'),
       menuPermissions: document.getElementById('menuPermissions'),
       menuTestOverlay: document.getElementById('menuTestOverlay'),
@@ -287,6 +335,10 @@ class WhoseTabApp {
       paymentSaveAliasText: document.getElementById('paymentSaveAliasText'),
       snapAmount: document.getElementById('snapAmount'),
       snapTitle: document.getElementById('snapTitle'),
+      openLocationPickerBtn: document.getElementById('openLocationPickerBtn'),
+      selectedLocationChip: document.getElementById('selectedLocationChip'),
+      selectedLocationText: document.getElementById('selectedLocationText'),
+      clearSelectedLocationBtn: document.getElementById('clearSelectedLocationBtn'),
       snapCategoryGroup: document.getElementById('snapCategoryGroup'),
       snapPeopleLabel: document.getElementById('snapPeopleLabel'),
       pickPhoneEntryBtn: document.getElementById('pickPhoneEntryBtn'),
@@ -338,6 +390,7 @@ class WhoseTabApp {
       confirmRepaymentForm: document.getElementById('confirmRepaymentForm'),
       repaymentAmountDisplay: document.getElementById('repaymentAmountDisplay'),
       repaymentSourceDetail: document.getElementById('repaymentSourceDetail'),
+      repaymentGuessBadge: document.getElementById('repaymentGuessBadge'),
       repaymentNewContactBtn: document.getElementById('repaymentNewContactBtn'),
       repaymentPersonSelect: document.getElementById('repaymentPersonSelect'),
       repaymentSaveAliasRow: document.getElementById('repaymentSaveAliasRow'),
@@ -347,6 +400,14 @@ class WhoseTabApp {
       repaymentAmountInput: document.getElementById('repaymentAmountInput'),
       repaymentNotesInput: document.getElementById('repaymentNotesInput'),
       dismissRepaymentBtn: document.getElementById('dismissRepaymentBtn'),
+
+      shopLocationModal: document.getElementById('shopLocationModal'),
+      closeShopLocationModalBtn: document.getElementById('closeShopLocationModalBtn'),
+      shopSearchInput: document.getElementById('shopSearchInput'),
+      shopUseGpsBtn: document.getElementById('shopUseGpsBtn'),
+      shopOpenGmapsBtn: document.getElementById('shopOpenGmapsBtn'),
+      shopLocationStatus: document.getElementById('shopLocationStatus'),
+      shopResultsList: document.getElementById('shopResultsList'),
 
       updateModal: document.getElementById('updateModal'),
       closeUpdateModalBtn: document.getElementById('closeUpdateModalBtn'),
@@ -394,7 +455,7 @@ class WhoseTabApp {
         }
       } catch (e) {}
     }
-    this.dom.appVersionDisplay.textContent = 'v1.2.0';
+    this.dom.appVersionDisplay.textContent = 'v1.3.0';
   }
 
   // ================= SCANNER STATUS & PERMISSIONS =================
@@ -468,12 +529,40 @@ class WhoseTabApp {
     });
   }
 
+  openModalElement(el) {
+    if (!el) return;
+    const prevTimer = this.modalCloseTimers?.get(el);
+    if (prevTimer) {
+      clearTimeout(prevTimer);
+      this.modalCloseTimers.delete(el);
+    }
+    el.classList.remove('closing');
+    el.classList.remove('hidden');
+  }
+
+  closeModalElement(el, onAfterHide = null) {
+    if (!el || el.classList.contains('hidden')) {
+      if (typeof onAfterHide === 'function') onAfterHide();
+      return;
+    }
+    const prevTimer = this.modalCloseTimers?.get(el);
+    if (prevTimer) clearTimeout(prevTimer);
+    el.classList.add('closing');
+    const timer = setTimeout(() => {
+      el.classList.add('hidden');
+      el.classList.remove('closing');
+      this.modalCloseTimers?.delete(el);
+      if (typeof onAfterHide === 'function') onAfterHide();
+    }, 180);
+    this.modalCloseTimers?.set(el, timer);
+  }
+
   openSetupModal() {
-    this.dom.setupModal?.classList.remove('hidden');
+    this.openModalElement(this.dom.setupModal);
   }
 
   closeSetupModal() {
-    this.dom.setupModal?.classList.add('hidden');
+    this.closeModalElement(this.dom.setupModal);
   }
 
   // ================= EVENT BINDING =================
@@ -498,6 +587,10 @@ class WhoseTabApp {
     this.dom.menuRecentDetections?.addEventListener('click', () => {
       this.closeHeaderMenu();
       this.openRecentDetectionsModal();
+    });
+    this.dom.menuSharePendingSummary?.addEventListener('click', () => {
+      this.closeHeaderMenu();
+      this.shareAllPendingSummary();
     });
     this.dom.menuAddContact?.addEventListener('click', () => {
       this.closeHeaderMenu();
@@ -628,7 +721,7 @@ class WhoseTabApp {
 
     this.dom.testOverlaySettingsBtn?.addEventListener('click', () => this.triggerQuickAddPreview());
     this.dom.checkForUpdatesBtn?.addEventListener('click', () => this.triggerUpdateCheck());
-    this.dom.closeUpdateModalBtn?.addEventListener('click', () => this.dom.updateModal.classList.add('hidden'));
+    this.dom.closeUpdateModalBtn?.addEventListener('click', () => this.closeModalElement(this.dom.updateModal));
 
     this.dom.downloadUpdateBtn?.addEventListener('click', () => {
       const apkUrl = this.dom.downloadUpdateBtn.dataset.apkUrl;
@@ -640,17 +733,30 @@ class WhoseTabApp {
         window.AndroidBridge.downloadAndInstallUpdate(apkUrl);
       } else {
         window.open(apkUrl, '_blank');
-        this.dom.updateModal.classList.add('hidden');
+        this.closeModalElement(this.dom.updateModal);
       }
     });
 
-    // Bottom Navigation
-    this.dom.navItems.forEach(item => {
+    // Bottom Navigation with directional slide transitions
+    const navList = Array.from(this.dom.navItems);
+    navList.forEach((item, idx) => {
       item.addEventListener('click', () => {
+        if (idx === this.currentTabIndex) return;
+        const enterClass = idx > this.currentTabIndex ? 'anim-enter-right' : 'anim-enter-left';
+        this.currentTabIndex = idx;
+
         this.dom.navItems.forEach(n => n.classList.remove('active'));
         item.classList.add('active');
         const targetId = item.dataset.target;
-        this.dom.tabViews.forEach(view => view.classList.toggle('active', view.id === targetId));
+        this.dom.tabViews.forEach(view => {
+          view.classList.remove('anim-enter-right', 'anim-enter-left');
+          const isTarget = view.id === targetId;
+          view.classList.toggle('active', isTarget);
+          if (isTarget) {
+            void view.offsetWidth;
+            view.classList.add(enterClass);
+          }
+        });
       });
     });
 
@@ -816,7 +922,10 @@ class WhoseTabApp {
     this.dom.settleDirectionBar?.querySelectorAll('[data-dir]').forEach(btn => {
       btn.addEventListener('click', () => this.setSettleDirection(btn.dataset.dir));
     });
-    this.dom.closeSettleModalBtn?.addEventListener('click', () => this.dom.settleModal.classList.add('hidden'));
+    this.dom.closeSettleModalBtn?.addEventListener('click', () => this.closeModalElement(this.dom.settleModal));
+    this.dom.settleModal?.addEventListener('click', (e) => {
+      if (e.target === this.dom.settleModal) this.closeModalElement(this.dom.settleModal);
+    });
     this.dom.closeConfirmRepaymentModalBtn?.addEventListener('click', () => this.closeConfirmRepaymentModal());
     this.dom.dismissRepaymentBtn?.addEventListener('click', () => {
       this.dismissRepaymentData();
@@ -826,6 +935,30 @@ class WhoseTabApp {
     this.dom.confirmRepaymentForm?.addEventListener('submit', (e) => this.handleConfirmRepaymentSubmit(e));
     this.dom.repaymentPersonSelect?.addEventListener('change', () => this.updateRepaymentPreview());
     this.dom.repaymentAmountInput?.addEventListener('input', () => this.updateRepaymentPreview());
+
+    // Google Maps Shop Location Picker
+    this.dom.openLocationPickerBtn?.addEventListener('click', () => this.openShopLocationModal());
+    this.dom.clearSelectedLocationBtn?.addEventListener('click', () => this.setSelectedEntryLocation(null));
+    this.dom.closeShopLocationModalBtn?.addEventListener('click', () => this.closeShopLocationModal());
+    this.dom.shopLocationModal?.addEventListener('click', (e) => {
+      if (e.target === this.dom.shopLocationModal) this.closeShopLocationModal();
+    });
+    this.dom.shopUseGpsBtn?.addEventListener('click', () => this.requestNearbyShops());
+    this.dom.shopOpenGmapsBtn?.addEventListener('click', () => {
+      const q = (this.dom.shopSearchInput?.value || this.dom.snapTitle?.value || '').trim();
+      this.openLocationInMaps({ name: q || 'Shops near me', lat: this.lastGeoLat, lng: this.lastGeoLng });
+    });
+    this.dom.shopSearchInput?.addEventListener('input', () => {
+      clearTimeout(this.shopSearchTimer);
+      const q = this.dom.shopSearchInput.value.trim();
+      this.onlineShopResults = [];
+      this.renderShopResults();
+      if (q.length >= 2) {
+        this.shopSearchTimer = setTimeout(() => {
+          window.AndroidBridge?.searchShopsOnline?.(q, this.lastGeoLat || 0, this.lastGeoLng || 0);
+        }, 420);
+      }
+    });
 
     this.dom.snapExpenseForm?.addEventListener('submit', (e) => this.handleSnapSubmit(e));
     this.dom.addPersonForm?.addEventListener('submit', (e) => this.handleAddPersonSubmit(e));
@@ -983,69 +1116,108 @@ class WhoseTabApp {
   isGenericPaymentLabel(str) {
     if (!str) return true;
     const clean = str.trim().toLowerCase();
-    return clean.length < 2 || ['merchant', 'someone', 'purchase', 'payment', 'upi', 'bank'].includes(clean);
+    const norm = clean.replace(/[^a-z0-9]/g, '');
+    return clean.length < 3 || norm.length < 3
+      || GENERIC_ALIAS_TOKENS.has(clean) || GENERIC_ALIAS_TOKENS.has(norm)
+      || COMMERCIAL_MERCHANTS.has(norm);
+  }
+
+  isCommercialMerchantName(str) {
+    const norm = String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!norm) return false;
+    if (COMMERCIAL_MERCHANTS.has(norm)) return true;
+    for (const m of COMMERCIAL_MERCHANTS) {
+      if (m.length >= 5 && (norm === m || norm.startsWith(m))) return true;
+    }
+    return false;
   }
 
   findMatchingContact(sender, handle = '') {
     if ((!sender && !handle) || !this.ledger.people.length) return null;
     const rawS = (sender || '').trim();
     const rawH = (handle || '').trim();
-    const combined = `${rawS} ${rawH}`.trim().toLowerCase();
 
-    const digits = combined.replace(/[^0-9]/g, '');
-    if (digits.length >= 10) {
-      const tail10 = digits.slice(-10);
+    // 1. Phone match ONLY from explicit handle OR purely-phone sender (never random body numbers)
+    const handleDigits = rawH.replace(/[^0-9]/g, '');
+    const senderLooksPhone = /^\+?[\d\s()-]{10,16}$/.test(rawS);
+    const senderPhoneDigits = senderLooksPhone ? rawS.replace(/[^0-9]/g, '') : '';
+    const phoneDigits = handleDigits.length >= 10 ? handleDigits : senderPhoneDigits;
+    if (phoneDigits.length >= 10) {
+      const tail10 = phoneDigits.slice(-10);
       const p = this.ledger.people.find(person => person.phone && person.phone.replace(/[^0-9]/g, '').endsWith(tail10));
       if (p) return p;
     }
 
-    // Masked VPA suffix (*7113@wahdfcbank -> unique phone tail match)
-    const tailMatch = combined.match(/\*?([0-9]{4})@/);
+    // 2. Masked VPA suffix (*7113@wahdfcbank -> unique 4-digit phone tail match)
+    const vpaSource = (rawH.includes('@') ? rawH : (rawS.includes('@') ? rawS : '')).toLowerCase();
+    const tailMatch = vpaSource.match(/\*?([0-9]{4})@/);
     if (tailMatch && tailMatch[1]) {
       const tail4 = tailMatch[1];
       const matches = this.ledger.people.filter(person => person.phone && person.phone.replace(/[^0-9]/g, '').endsWith(tail4));
       if (matches.length === 1) return matches[0];
     }
 
-    const pUpi = this.ledger.people.find(person => {
-      if (!person.upi) return false;
-      const u = person.upi.toLowerCase().trim();
-      return combined.includes(u) || (rawH && u.includes(rawH.toLowerCase()));
-    });
-    if (pUpi) return pUpi;
+    // 3. Exact UPI match on explicit handle
+    if (rawH) {
+      const lowH = rawH.toLowerCase();
+      const pUpi = this.ledger.people.find(person => {
+        if (!person.upi) return false;
+        const u = person.upi.toLowerCase().trim();
+        return lowH === u || lowH.includes(u) || (rawH.includes('@') && u.includes(lowH));
+      });
+      if (pUpi) return pUpi;
+    }
 
     const norm = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanS = norm(rawS);
     const cleanH = norm(rawH);
 
-    // Learned payment aliases
+    // Commercial merchants (Amazon Pay, Flipkart, Swiggy, Zomato, etc.) must NEVER fuzzily match a personal contact
+    if (this.isCommercialMerchantName(rawS)) {
+      return null;
+    }
+
+    // 4. Learned payment aliases (strict normalized equality, >= 4 chars, non-generic)
     const pAlias = this.ledger.people.find(person => {
       if (!Array.isArray(person.aliases)) return false;
       return person.aliases.some(alias => {
         const na = norm(alias);
-        if (!na) return false;
-        return (cleanS && (na === cleanS || cleanS.includes(na))) || (cleanH && na === cleanH) || combined.includes(alias.toLowerCase());
+        if (!na || na.length < 4 || GENERIC_ALIAS_TOKENS.has(na) || COMMERCIAL_MERCHANTS.has(na)) return false;
+        return (cleanS && na === cleanS) || (cleanH && na === cleanH);
       });
     });
     if (pAlias) return pAlias;
 
-    if (!cleanS || cleanS.length < 3) return null;
+    if (!cleanS || cleanS.length < 4) return null;
 
+    // 5. Exact normalized contact name match
     let pName = this.ledger.people.find(person => norm(person.name) === cleanS);
     if (pName) return pName;
 
-    pName = this.ledger.people.find(person => {
-      const first = norm(person.name.split(' ')[0]);
-      return first.length >= 3 && (cleanS.includes(first) || first.includes(cleanS.split(' ')[0]));
-    });
-    if (pName) return pName;
+    // 6. Exact first-name match (>= 4 chars) only when single word or unique exact first word match
+    const senderWords = rawS.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const senderFirst = norm(senderWords[0] || '');
+    if (senderFirst.length >= 4 && !GENERIC_ALIAS_TOKENS.has(senderFirst)) {
+      const firstMatches = this.ledger.people.filter(person => {
+        const pFirst = norm(person.name.split(' ')[0]);
+        return pFirst.length >= 4 && pFirst === senderFirst;
+      });
+      if (firstMatches.length === 1 && (senderWords.length === 1 || norm(firstMatches[0].name) === cleanS)) {
+        return firstMatches[0];
+      }
+    }
 
-    pName = this.ledger.people.find(person => {
-      const na = norm(person.name).replace(/h/g, '');
-      const nb = cleanS.replace(/h/g, '');
-      return na.length >= 3 && (na === nb || na.includes(nb) || nb.includes(na));
-    });
-    return pName || null;
+    // 7. Exact spelling variant omitting silent 'h' (e.g. Bhuvnesh <-> Buvnesh)
+    const nb = cleanS.replace(/h/g, '');
+    if (nb.length >= 4) {
+      pName = this.ledger.people.find(person => {
+        const na = norm(person.name).replace(/h/g, '');
+        return na.length >= 4 && na === nb;
+      });
+      if (pName) return pName;
+    }
+
+    return null;
   }
 
   addAliasToPerson(personId, rawName, rawHandle = '') {
@@ -1058,7 +1230,7 @@ class WhoseTabApp {
 
     candidates.forEach(raw => {
       const clean = (raw || '').trim();
-      if (!clean || this.isGenericPaymentLabel(clean)) return;
+      if (!clean || this.isGenericPaymentLabel(clean) || this.isCommercialMerchantName(clean)) return;
 
       const phoneDigits = this.normalizePhoneDigits(clean);
       if (phoneDigits.length === 10 && /^[6-9][0-9]{9}$/.test(phoneDigits) && !person.phone) {
@@ -1071,6 +1243,9 @@ class WhoseTabApp {
         person.upi = clean;
         changed = true;
       }
+
+      const normAlpha = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (normAlpha.length < 4 || GENERIC_ALIAS_TOKENS.has(normAlpha) || COMMERCIAL_MERCHANTS.has(normAlpha)) return;
 
       const norm = clean.toLowerCase();
       if (norm === person.name.trim().toLowerCase()) return;
@@ -1089,11 +1264,11 @@ class WhoseTabApp {
   // ================= RECENT DETECTIONS MODAL =================
   openRecentDetectionsModal() {
     this.renderRecentDetectionsList();
-    this.dom.recentDetectionsModal?.classList.remove('hidden');
+    this.openModalElement(this.dom.recentDetectionsModal);
   }
 
   closeRecentDetectionsModal() {
-    this.dom.recentDetectionsModal?.classList.add('hidden');
+    this.closeModalElement(this.dom.recentDetectionsModal);
   }
 
   renderRecentDetectionsList() {
@@ -1278,6 +1453,11 @@ class WhoseTabApp {
       }
     }
 
+    if (this.toastCloseTimer) {
+      clearTimeout(this.toastCloseTimer);
+      this.toastCloseTimer = null;
+    }
+    this.dom.inAppQuickToast.classList.remove('closing');
     this.dom.inAppQuickToast.classList.remove('hidden');
   }
 
@@ -1339,12 +1519,21 @@ class WhoseTabApp {
   }
 
   hideInAppQuickToast(markDismissed) {
-    this.dom.inAppQuickToast?.classList.add('hidden');
+    const toastEl = this.dom.inAppQuickToast;
     if (markDismissed && this.detectedPaytmData) {
       this.markPaymentDismissed(this.detectedPaytmData);
       this.detectedPaytmData = null;
     }
     this.toastSelectedIds.clear();
+    if (!toastEl || toastEl.classList.contains('hidden')) return;
+
+    if (this.toastCloseTimer) clearTimeout(this.toastCloseTimer);
+    toastEl.classList.add('closing');
+    this.toastCloseTimer = setTimeout(() => {
+      toastEl.classList.add('hidden');
+      toastEl.classList.remove('closing');
+      this.toastCloseTimer = null;
+    }, 200);
   }
 
   // ================= PENDING INCOMING BRIDGE EVENTS =================
@@ -1560,7 +1749,7 @@ class WhoseTabApp {
       this.dom.summaryFriendsTotal.textContent = isBorrow
         ? `₹${calc.friendsTotalPool.toFixed(2)} you will owe`
         : `₹${calc.friendsTotalPool.toFixed(2)} to collect`;
-      this.dom.summaryFriendsTotal.className = `breakdown-total tabular ${isBorrow ? 'text-danger' : ''}`;
+      this.dom.summaryFriendsTotal.className = `breakdown-total tabular ${isBorrow ? 'borrowed' : ''}`;
     }
 
     if (!this.dom.summaryBreakdownList) return;
@@ -1653,7 +1842,7 @@ class WhoseTabApp {
       this.dom.summaryFriendsTotal.textContent = isBorrow
         ? `₹${calc.friendsTotalPool.toFixed(2)} you will owe`
         : `₹${calc.friendsTotalPool.toFixed(2)} to collect`;
-      this.dom.summaryFriendsTotal.className = `breakdown-total tabular ${isBorrow ? 'text-danger' : ''}`;
+      this.dom.summaryFriendsTotal.className = `breakdown-total tabular ${isBorrow ? 'borrowed' : ''}`;
     }
 
     const numFriends = calc.selectedList.length;
@@ -1778,28 +1967,34 @@ class WhoseTabApp {
     }
 
     const matched = this.findMatchingContact(cp, handle);
+    let selPerson = null;
+    if (this.selectedPersonIds.size === 1) {
+      const pid = Array.from(this.selectedPersonIds)[0];
+      selPerson = this.ledger.people.find(p => p.id === pid) || null;
+    }
+
     if (this.dom.paymentLinkSourceTag) {
-      this.dom.paymentLinkSourceTag.textContent = matched ? `Linked to ${matched.name}` : 'Scanned Payment Name';
+      if (matched && (!selPerson || matched.id === selPerson.id)) {
+        this.dom.paymentLinkSourceTag.textContent = `Linked to ${matched.name}`;
+      } else if (selPerson) {
+        this.dom.paymentLinkSourceTag.textContent = `Selected: ${selPerson.name}`;
+      } else {
+        this.dom.paymentLinkSourceTag.textContent = 'Scanned Payment Name';
+      }
     }
     if (this.dom.paymentLinkName) {
       this.dom.paymentLinkName.textContent = handle && !cp.includes(handle) ? `${cp} (${handle})` : cp;
     }
     if (this.dom.paymentLinkCreateBtn) {
-      this.dom.paymentLinkCreateBtn.classList.toggle('hidden', Boolean(matched));
+      this.dom.paymentLinkCreateBtn.classList.toggle('hidden', Boolean(matched) || this.isCommercialMerchantName(cp));
     }
 
     if (this.dom.paymentSaveAliasRow && this.dom.paymentSaveAliasCheck && this.dom.paymentSaveAliasText) {
-      if (this.selectedPersonIds.size === 1) {
-        const pid = Array.from(this.selectedPersonIds)[0];
-        const selPerson = this.ledger.people.find(p => p.id === pid);
-        const alreadyKnown = matched && matched.id === pid;
-        if (selPerson && !alreadyKnown) {
-          this.dom.paymentSaveAliasRow.classList.remove('hidden');
-          this.dom.paymentSaveAliasText.textContent = `Remember "${cp}" for ${selPerson.name}`;
-        } else {
-          this.dom.paymentSaveAliasRow.classList.add('hidden');
-          this.dom.paymentSaveAliasCheck.checked = false;
-        }
+      const alreadyKnown = matched && selPerson && matched.id === selPerson.id;
+      const canSaveAlias = selPerson && !alreadyKnown && !this.isGenericPaymentLabel(cp) && !this.isCommercialMerchantName(cp);
+      if (canSaveAlias) {
+        this.dom.paymentSaveAliasRow.classList.remove('hidden');
+        this.dom.paymentSaveAliasText.textContent = `Remember "${cp}" for ${selPerson.name}`;
       } else {
         this.dom.paymentSaveAliasRow.classList.add('hidden');
         this.dom.paymentSaveAliasCheck.checked = false;
@@ -1858,11 +2053,12 @@ class WhoseTabApp {
     this.hideSnapError();
     this.dom.snapAmount.value = '';
     this.dom.snapTitle.value = '';
+    this.setSelectedEntryLocation(null);
     if (this.dom.snapMyShare) this.dom.snapMyShare.value = '';
     if (this.dom.paymentSaveAliasCheck) this.dom.paymentSaveAliasCheck.checked = false;
 
     this.setEntryKind(kind);
-    this.dom.snapExpenseModal.classList.remove('hidden');
+    this.openModalElement(this.dom.snapExpenseModal);
     if (window.innerHeight > 520) {
       setTimeout(() => this.dom.snapAmount.focus(), 100);
     }
@@ -1874,6 +2070,7 @@ class WhoseTabApp {
     this.selectedPersonIds.clear();
     this.manualSplits.clear();
     this.hideSnapError();
+    this.setSelectedEntryLocation(null);
 
     const counterparty = (data.recipient || '').trim();
     const handle = (data.counterpartyHandle || '').trim();
@@ -1883,7 +2080,9 @@ class WhoseTabApp {
     }
 
     this.dom.snapAmount.value = data.amount || '';
-    this.dom.snapTitle.value = counterparty && !this.isGenericPaymentLabel(counterparty) ? counterparty : 'Payment';
+    this.dom.snapTitle.value = counterparty && !this.isGenericPaymentLabel(counterparty)
+      ? counterparty
+      : (this.isCommercialMerchantName(counterparty) ? counterparty : 'Payment');
     if (this.dom.snapMyShare) this.dom.snapMyShare.value = '';
     if (this.dom.paymentSaveAliasCheck) this.dom.paymentSaveAliasCheck.checked = false;
 
@@ -1893,15 +2092,17 @@ class WhoseTabApp {
     }
 
     this.setEntryKind(matched ? 'lent' : 'split');
-    this.dom.snapExpenseModal.classList.remove('hidden');
+    this.openModalElement(this.dom.snapExpenseModal);
     const sheet = this.dom.snapExpenseModal.querySelector('.modal-sheet');
     if (sheet) sheet.scrollTop = 0;
   }
 
   closeSnapModal() {
-    this.dom.snapExpenseModal.classList.add('hidden');
-    this.hideSnapError();
-    this.manualSplits.clear();
+    this.closeModalElement(this.dom.snapExpenseModal, () => {
+      this.hideSnapError();
+      this.manualSplits.clear();
+      this.setSelectedEntryLocation(null);
+    });
     if (this.detectedPaytmData) {
       this.markPaymentDismissed(this.detectedPaytmData);
       this.detectedPaytmData = null;
@@ -2003,6 +2204,11 @@ class WhoseTabApp {
     const counterpartyName = this.detectedPaytmData?.recipient || '';
     const counterpartyHandle = this.detectedPaytmData?.counterpartyHandle || '';
 
+    const attachedLoc = this.currentEntryLocation ? { ...this.currentEntryLocation } : null;
+    if (attachedLoc) {
+      this.saveShopToDirectory(attachedLoc);
+    }
+
     const isBorrow = this.currentEntryKind === 'borrowed';
     const newEntry = {
       id: 'e_' + Date.now(),
@@ -2015,6 +2221,7 @@ class WhoseTabApp {
       splitType: isBorrow ? 'Borrowed' : (calc.myShare > 0 || calc.hasManual ? 'Split' : 'BoughtForPerson'),
       splits,
       category,
+      location: attachedLoc,
       paymentSource: this.detectedPaytmData ? 'Paytm' : 'Manual',
       date: new Date().toISOString(),
       myShare: calc.myShare
@@ -2032,14 +2239,14 @@ class WhoseTabApp {
 
   // ================= CONTACT SHEETS & CRUD =================
   openAddPersonModal() {
-    this.dom.addPersonModal?.classList.remove('hidden');
+    this.openModalElement(this.dom.addPersonModal);
     if (window.innerHeight > 520) {
       setTimeout(() => document.getElementById('personName')?.focus(), 100);
     }
   }
 
   closeAddPersonModal() {
-    this.dom.addPersonModal?.classList.add('hidden');
+    this.closeModalElement(this.dom.addPersonModal);
   }
 
   handleAddPersonSubmit(e) {
@@ -2095,6 +2302,76 @@ class WhoseTabApp {
     return items.sort((a, b) => b.ts - a.ts);
   }
 
+  getUnsettledEntriesForPerson(personId) {
+    const netBalance = Math.round(((this.calculateNetBalances()[personId] || 0)) * 100) / 100;
+    if (Math.abs(netBalance) <= 0.01) {
+      return { netBalance: 0, direction: 'settled', unsettledItems: [] };
+    }
+
+    const lentQueue = [];
+    const borrowQueue = [];
+    const sortedExpenses = [...this.ledger.expenses].sort((a, b) => (new Date(a.date).getTime() || 0) - (new Date(b.date).getTime() || 0));
+
+    sortedExpenses.forEach(exp => {
+      const isBorrow = exp.entryKind === 'borrowed' || (exp.paidById && exp.paidById !== 'me');
+      const sp = (exp.splits || []).find(s => s.personId === personId);
+      const amt = sp ? (parseFloat(sp.amountOwed) || 0) : 0;
+      if (amt <= 0.01) return;
+      const entry = {
+        id: exp.id,
+        title: exp.title || (isBorrow ? 'Borrowed' : 'Expense'),
+        date: exp.date,
+        ts: new Date(exp.date).getTime() || 0,
+        original: amt,
+        remaining: Math.round(amt * 100) / 100,
+        kind: isBorrow ? 'borrowed' : 'lent'
+      };
+      if (isBorrow) borrowQueue.push(entry);
+      else lentQueue.push(entry);
+    });
+
+    let totalReceived = 0;
+    let totalPaid = 0;
+    this.ledger.settlements.forEach(s => {
+      const amt = parseFloat(s.amount) || 0;
+      if (amt <= 0.01) return;
+      if (s.toPersonId === 'me' && s.fromPersonId === personId) totalReceived += amt;
+      else if (s.fromPersonId === 'me' && s.toPersonId === personId) totalPaid += amt;
+    });
+
+    const applyFifo = (queue, credit) => {
+      let left = credit;
+      for (let i = 0; i < queue.length && left > 0.01; i++) {
+        const take = Math.min(queue[i].remaining, left);
+        queue[i].remaining = Math.round((queue[i].remaining - take) * 100) / 100;
+        left = Math.round((left - take) * 100) / 100;
+      }
+      return left;
+    };
+
+    const excessReceived = applyFifo(lentQueue, totalReceived);
+    const excessPaid = applyFifo(borrowQueue, totalPaid);
+
+    // Cross-clear remaining opposite entries plus any excess settlements
+    if (netBalance > 0.01) {
+      const borrowRemainingSum = borrowQueue.reduce((a, x) => a + x.remaining, 0) + excessPaid;
+      applyFifo(lentQueue, borrowRemainingSum);
+      return {
+        netBalance,
+        direction: 'owed_to_me',
+        unsettledItems: lentQueue.filter(x => x.remaining > 0.01).sort((a, b) => b.ts - a.ts)
+      };
+    } else {
+      const lentRemainingSum = lentQueue.reduce((a, x) => a + x.remaining, 0) + excessReceived;
+      applyFifo(borrowQueue, lentRemainingSum);
+      return {
+        netBalance,
+        direction: 'i_owe',
+        unsettledItems: borrowQueue.filter(x => x.remaining > 0.01).sort((a, b) => b.ts - a.ts)
+      };
+    }
+  }
+
   openPersonActionsModal(personId) {
     const person = this.ledger.people.find(p => p.id === personId);
     if (!person || !this.dom.personActionsModal) return;
@@ -2117,7 +2394,7 @@ class WhoseTabApp {
       this.dom.actionPersonBalance.textContent = bal > 0.01
         ? `Owes ₹${bal.toFixed(2)}`
         : bal < -0.01 ? `You owe ₹${Math.abs(bal).toFixed(2)}` : 'Settled';
-      this.dom.actionPersonBalance.className = `action-person-bal tabular ${bal > 0.01 ? 'text-success' : bal < -0.01 ? 'text-danger' : 'text-muted'}`;
+      this.dom.actionPersonBalance.className = `action-person-bal tabular ${bal > 0.01 ? 'text-danger' : bal < -0.01 ? 'text-borrow' : 'text-muted'}`;
     }
 
     if (this.dom.actionPayUpiBtn && this.dom.actionPayUpiLabel) {
@@ -2160,7 +2437,7 @@ class WhoseTabApp {
             const iPaidThem = s.fromPersonId === 'me' || s.direction === 'paid';
             btn.innerHTML = `
               <span class="row-secondary-text">${iPaidThem ? 'Paid back' : 'Repaid'} • ${dStr}</span>
-              <span class="balance-amt positive tabular">₹${parseFloat(s.amount).toFixed(2)}</span>
+              <span class="balance-amt repaid tabular">₹${parseFloat(s.amount).toFixed(2)}</span>
             `;
             btn.addEventListener('click', () => {
               this.closePersonActionsModal();
@@ -2172,52 +2449,92 @@ class WhoseTabApp {
       }
     }
 
-    this.dom.personActionsModal.classList.remove('hidden');
+    this.openModalElement(this.dom.personActionsModal);
   }
 
   sharePersonSummary(personId) {
     const person = this.ledger.people.find(p => p.id === personId);
     if (!person) return;
-    const bal = this.calculateNetBalances()[personId] || 0;
-    const history = this.getPersonHistory(personId).slice(0, 6);
-
-    const lines = [`WhoseTab Summary — ${person.name}`];
-    if (bal > 0.01) {
-      lines.push(`Pending to me: ₹${bal.toFixed(2)}`);
-    } else if (bal < -0.01) {
-      lines.push(`I owe: ₹${Math.abs(bal).toFixed(2)}`);
-    } else {
-      lines.push('Balance: Settled (₹0.00)');
+    const { netBalance, unsettledItems } = this.getUnsettledEntriesForPerson(personId);
+    if (Math.abs(netBalance) <= 0.01) {
+      alert(`All entries with ${person.name} are already settled.`);
+      return;
     }
 
-    if (history.length > 0) {
-      lines.push('', 'Recent:');
-      history.forEach(h => {
-        const dStr = new Date(h.ts).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
-        if (h.kind === 'expense') {
-          const isBorrow = h.item.entryKind === 'borrowed' || h.item.paidById !== 'me';
-          const sp = (h.item.splits || []).find(s => s.personId === personId);
-          const amt = sp ? parseFloat(sp.amountOwed) : parseFloat(h.item.totalAmount);
-          lines.push(`- ${dStr}: ${h.item.title} (${isBorrow ? 'you owe' : 'owes'} ₹${amt.toFixed(2)})`);
-        } else {
-          const iPaid = h.item.fromPersonId === 'me' || h.item.direction === 'paid';
-          lines.push(`- ${dStr}: ${iPaid ? 'Paid' : 'Received'} ₹${parseFloat(h.item.amount).toFixed(2)}`);
-        }
+    const lines = [`WhoseTab Pending Summary — ${person.name}`];
+    if (netBalance > 0.01) {
+      lines.push(`Owes me: ₹${netBalance.toFixed(2)}`);
+    } else {
+      lines.push(`I owe: ₹${Math.abs(netBalance).toFixed(2)}`);
+    }
+
+    if (unsettledItems.length > 0) {
+      lines.push('', netBalance > 0.01 ? 'Pending owed items:' : 'Pending borrowed items:');
+      unsettledItems.forEach(item => {
+        const dStr = new Date(item.ts).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+        lines.push(`- ${dStr}: ${item.title} — ₹${item.remaining.toFixed(2)}`);
       });
     }
 
     const summaryText = lines.join('\n');
     if (window.AndroidBridge && window.AndroidBridge.shareText) {
-      window.AndroidBridge.shareText(summaryText, `Summary with ${person.name}`);
+      window.AndroidBridge.shareText(summaryText, `Pending with ${person.name}`);
     } else if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(summaryText);
-      alert('Summary copied to clipboard.');
+      alert('Pending summary copied to clipboard.');
+    }
+  }
+
+  shareAllPendingSummary() {
+    const balances = this.calculateNetBalances();
+    const owedToMe = [];
+    const iOwe = [];
+    let totalCollect = 0;
+    let totalPay = 0;
+
+    this.ledger.people.forEach(person => {
+      const bal = Math.round(((balances[person.id] || 0)) * 100) / 100;
+      if (bal > 0.01) {
+        totalCollect += bal;
+        owedToMe.push({ person, bal });
+      } else if (bal < -0.01) {
+        totalPay += Math.abs(bal);
+        iOwe.push({ person, bal: Math.abs(bal) });
+      }
+    });
+
+    if (owedToMe.length === 0 && iOwe.length === 0) {
+      alert('All balances are settled — nothing pending to share.');
+      return;
+    }
+
+    const lines = ['WhoseTab Pending Balances'];
+    if (owedToMe.length > 0) {
+      lines.push('', `Owed to me (Total ₹${totalCollect.toFixed(2)}):`);
+      owedToMe.forEach(row => {
+        lines.push(`• ${row.person.name}: ₹${row.bal.toFixed(2)}`);
+      });
+    }
+    if (iOwe.length > 0) {
+      lines.push('', `I borrowed / owe (Total ₹${totalPay.toFixed(2)}):`);
+      iOwe.forEach(row => {
+        lines.push(`• ${row.person.name}: ₹${row.bal.toFixed(2)}`);
+      });
+    }
+
+    const text = lines.join('\n');
+    if (window.AndroidBridge && window.AndroidBridge.shareText) {
+      window.AndroidBridge.shareText(text, 'Pending Balances');
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text);
+      alert('Pending summary copied to clipboard.');
     }
   }
 
   closePersonActionsModal() {
-    this.dom.personActionsModal?.classList.add('hidden');
-    this.activeActionPersonId = null;
+    this.closeModalElement(this.dom.personActionsModal, () => {
+      this.activeActionPersonId = null;
+    });
   }
 
   openEditPersonModal(personId) {
@@ -2235,7 +2552,7 @@ class WhoseTabApp {
     });
 
     this.renderEditPersonAliases(person);
-    this.dom.editPersonModal.classList.remove('hidden');
+    this.openModalElement(this.dom.editPersonModal);
   }
 
   renderEditPersonAliases(person) {
@@ -2262,7 +2579,7 @@ class WhoseTabApp {
   }
 
   closeEditPersonModal() {
-    this.dom.editPersonModal?.classList.add('hidden');
+    this.closeModalElement(this.dom.editPersonModal);
   }
 
   handleEditPersonSubmit(e) {
@@ -2314,14 +2631,25 @@ class WhoseTabApp {
       this.dom.detailTypeBadge.textContent = isBorrow
         ? 'Borrowed'
         : exp.entryKind === 'lent' ? 'Lent' : (exp.category || 'Split');
-      this.dom.detailTypeBadge.className = `eyebrow-tag ${isBorrow ? 'text-danger' : ''}`;
+      this.dom.detailTypeBadge.className = `eyebrow-tag ${isBorrow ? 'text-borrow' : 'text-danger'}`;
       this.dom.detailTitle.textContent = exp.title;
       this.dom.detailAmount.textContent = `${isBorrow ? '-' : ''}₹${parseFloat(exp.totalAmount).toFixed(2)}`;
+      this.dom.detailAmount.className = `detail-amount-hero tabular ${isBorrow ? 'text-borrow' : 'text-danger'}`;
       this.dom.detailTimestamp.textContent = new Date(exp.date).toLocaleString('en-IN', {
         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
       });
 
       const metaRows = [];
+      if (exp.location && (exp.location.name || exp.location.mapsUrl)) {
+        const locLabel = exp.location.name || 'Shop Location';
+        const locSub = exp.location.address ? ` (${exp.location.address})` : '';
+        metaRows.push(`
+          <button type="button" id="detailLocationBtn" class="settings-row interactive-row">
+            <span class="row-title">Location</span>
+            <span class="row-subtitle text-accent">${this.escapeHtml(locLabel + locSub)} ↗</span>
+          </button>
+        `);
+      }
       if (exp.counterpartyName) {
         metaRows.push(`
           <div class="settings-row">
@@ -2349,6 +2677,9 @@ class WhoseTabApp {
       if (metaRows.length > 0 && this.dom.detailMetaCard) {
         this.dom.detailMetaCard.innerHTML = metaRows.join('');
         this.dom.detailMetaCard.classList.remove('hidden');
+        document.getElementById('detailLocationBtn')?.addEventListener('click', () => {
+          this.openLocationInMaps(exp.location);
+        });
       }
 
       let html = '';
@@ -2384,6 +2715,7 @@ class WhoseTabApp {
       this.dom.detailTypeBadge.className = 'eyebrow-tag text-success';
       this.dom.detailTitle.textContent = iPaidThem ? `Paid ${name}` : `Repayment from ${name}`;
       this.dom.detailAmount.textContent = `${iPaidThem ? '-' : '+'}₹${parseFloat(s.amount).toFixed(2)}`;
+      this.dom.detailAmount.className = 'detail-amount-hero tabular text-success';
       this.dom.detailTimestamp.textContent = new Date(s.date).toLocaleString('en-IN', {
         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
       });
@@ -2399,12 +2731,13 @@ class WhoseTabApp {
       `;
     }
 
-    this.dom.activityDetailModal.classList.remove('hidden');
+    this.openModalElement(this.dom.activityDetailModal);
   }
 
   closeActivityDetailModal() {
-    this.dom.activityDetailModal?.classList.add('hidden');
-    this.activeDetailItem = null;
+    this.closeModalElement(this.dom.activityDetailModal, () => {
+      this.activeDetailItem = null;
+    });
   }
 
   deleteActiveDetailEntry() {
@@ -2489,7 +2822,7 @@ class WhoseTabApp {
     this.setSettleDirection(bal < -0.01 ? 'paid' : 'received');
     this.dom.settleAmount.value = Math.abs(bal) > 0.01 ? Math.abs(bal).toFixed(2) : '';
     this.dom.settleForm.dataset.personId = personId;
-    this.dom.settleModal.classList.remove('hidden');
+    this.openModalElement(this.dom.settleModal);
   }
 
   handleSettleSubmit(e) {
@@ -2517,10 +2850,67 @@ class WhoseTabApp {
 
     this.saveLedger();
     this.dom.settleForm.reset();
-    this.dom.settleModal.classList.add('hidden');
+    this.closeModalElement(this.dom.settleModal);
   }
 
-  // ================= INCOMING REPAYMENT PROMPT =================
+  // ================= INCOMING REPAYMENT PROMPT & EXACT AMOUNT GUESSING =================
+  findRepaymentSuggestion(sender, handle, amount) {
+    if (!amount || amount <= 0.01 || !this.ledger.people.length) return null;
+    const identityMatch = this.findMatchingContact(sender, handle);
+    const balances = this.calculateNetBalances();
+
+    const checkPerson = (p) => {
+      const bal = balances[p.id] || 0;
+      const { unsettledItems } = this.getUnsettledEntriesForPerson(p.id);
+      const exactEntry = unsettledItems.find(item => item.kind === 'lent' && Math.abs(item.remaining - amount) <= 0.01);
+      if (exactEntry) {
+        const dStr = new Date(exactEntry.ts).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+        return {
+          person: p,
+          reason: `Matches "${exactEntry.title}" (₹${exactEntry.remaining.toFixed(2)} on ${dStr})`
+        };
+      }
+      if (bal > 0.01 && Math.abs(bal - amount) <= 0.01) {
+        return {
+          person: p,
+          reason: `Matches exact balance owed by ${p.name} (₹${bal.toFixed(2)})`
+        };
+      }
+      return null;
+    };
+
+    if (identityMatch) {
+      return checkPerson(identityMatch);
+    }
+
+    const entryHits = [];
+    const balanceHits = [];
+    this.ledger.people.forEach(p => {
+      const { unsettledItems } = this.getUnsettledEntriesForPerson(p.id);
+      const exactEntry = unsettledItems.find(item => item.kind === 'lent' && Math.abs(item.remaining - amount) <= 0.01);
+      if (exactEntry) {
+        const dStr = new Date(exactEntry.ts).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+        entryHits.push({
+          person: p,
+          reason: `Exact match: ₹${exactEntry.remaining.toFixed(2)} lent to ${p.name} (${exactEntry.title}, ${dStr})`
+        });
+      }
+      const bal = balances[p.id] || 0;
+      if (bal > 0.01 && Math.abs(bal - amount) <= 0.01) {
+        balanceHits.push({
+          person: p,
+          reason: `Exact match: total owed by ${p.name} (₹${bal.toFixed(2)})`
+        });
+      }
+    });
+
+    if (entryHits.length === 1) return entryHits[0];
+    if (balanceHits.length === 1) return balanceHits[0];
+    if (entryHits.length > 0) return entryHits[0];
+    if (balanceHits.length > 0) return balanceHits[0];
+    return null;
+  }
+
   openConfirmRepaymentModal(data) {
     if (!data || !this.dom.confirmRepaymentModal) return;
     this.detectedRepaymentData = data;
@@ -2528,6 +2918,7 @@ class WhoseTabApp {
     const amt = parseFloat(data.amount) || 0;
     const sender = data.sender || 'Someone';
     const handle = data.counterpartyHandle || '';
+    const suggestion = this.findRepaymentSuggestion(sender, handle, amt);
 
     if (this.dom.repaymentAmountDisplay) this.dom.repaymentAmountDisplay.textContent = `₹${amt.toFixed(2)}`;
     if (this.dom.repaymentAmountInput) this.dom.repaymentAmountInput.value = amt.toFixed(2);
@@ -2538,30 +2929,41 @@ class WhoseTabApp {
     }
     if (this.dom.repaymentNotesInput) this.dom.repaymentNotesInput.value = `Repayment from ${sender}`;
 
-    this.populateRepaymentContactsDropdown(sender, handle);
+    if (this.dom.repaymentGuessBadge) {
+      if (suggestion && suggestion.reason) {
+        this.dom.repaymentGuessBadge.textContent = suggestion.reason;
+        this.dom.repaymentGuessBadge.classList.remove('hidden');
+      } else {
+        this.dom.repaymentGuessBadge.classList.add('hidden');
+      }
+    }
+
+    this.populateRepaymentContactsDropdown(sender, handle, amt, suggestion);
     this.updateRepaymentPreview();
-    this.dom.confirmRepaymentModal.classList.remove('hidden');
+    this.openModalElement(this.dom.confirmRepaymentModal);
   }
 
-  populateRepaymentContactsDropdown(sender, handle) {
+  populateRepaymentContactsDropdown(sender, handle, amount = 0, suggestion = null) {
     const select = this.dom.repaymentPersonSelect;
     if (!select) return;
     select.innerHTML = '';
 
-    const matched = this.findMatchingContact(sender, handle);
+    const identityMatch = this.findMatchingContact(sender, handle);
+    const preferredMatch = identityMatch || (suggestion ? suggestion.person : null);
     if (this.ledger.people.length === 0) {
       select.innerHTML = '<option value="">No contacts yet — save sender above</option>';
       if (this.dom.repaymentSaveAliasRow) this.dom.repaymentSaveAliasRow.classList.add('hidden');
       return;
     }
 
+    const canSaveAlias = !this.isGenericPaymentLabel(sender) && !this.isCommercialMerchantName(sender);
     if (this.dom.repaymentSaveAliasRow) {
-      this.dom.repaymentSaveAliasRow.classList.remove('hidden');
-      if (this.dom.repaymentSaveAliasText) {
+      this.dom.repaymentSaveAliasRow.classList.toggle('hidden', !canSaveAlias);
+      if (this.dom.repaymentSaveAliasText && canSaveAlias) {
         this.dom.repaymentSaveAliasText.textContent = `Link "${sender}" to selected contact for future payments`;
       }
       if (this.dom.repaymentSaveAliasCheck) {
-        this.dom.repaymentSaveAliasCheck.checked = !matched;
+        this.dom.repaymentSaveAliasCheck.checked = canSaveAlias && !identityMatch;
       }
     }
 
@@ -2571,11 +2973,11 @@ class WhoseTabApp {
       opt.value = p.id;
       const bal = balances[p.id] || 0;
       opt.textContent = `${p.name} — ${bal > 0.01 ? `Owes ₹${bal.toFixed(2)}` : bal < -0.01 ? `You owe ₹${Math.abs(bal).toFixed(2)}` : 'Settled'}`;
-      if (matched && p.id === matched.id) opt.selected = true;
+      if (preferredMatch && p.id === preferredMatch.id) opt.selected = true;
       select.appendChild(opt);
     });
 
-    if (!matched && select.options.length > 0) {
+    if (!preferredMatch && select.options.length > 0) {
       const debtor = this.ledger.people.find(p => (balances[p.id] || 0) > 0);
       if (debtor) select.value = debtor.id;
     }
@@ -2625,17 +3027,17 @@ class WhoseTabApp {
     preview.innerHTML = `
       <div class="repayment-calc-row">
         <span>Current balance</span>
-        <span class="repayment-calc-val tabular ${currentDebt > 0 ? 'negative' : 'positive'}">
+        <span class="repayment-calc-val tabular ${currentDebt > 0.01 ? 'owed' : currentDebt < -0.01 ? 'borrowed' : 'repaid'}">
           ${currentDebt > 0.01 ? `Owes ₹${currentDebt.toFixed(2)}` : currentDebt < -0.01 ? `You owe ₹${Math.abs(currentDebt).toFixed(2)}` : '₹0.00'}
         </span>
       </div>
       <div class="repayment-calc-row">
         <span>Incoming credit</span>
-        <span class="repayment-calc-val positive tabular">-₹${amount.toFixed(2)}</span>
+        <span class="repayment-calc-val repaid tabular">-₹${amount.toFixed(2)}</span>
       </div>
       <div class="repayment-calc-row total-row">
         <span>Updated balance</span>
-        <span class="repayment-calc-val tabular ${newDebt <= 0.01 ? 'positive' : 'negative'}">
+        <span class="repayment-calc-val tabular ${Math.abs(newDebt) <= 0.01 ? 'repaid' : newDebt > 0.01 ? 'owed' : 'borrowed'}">
           ${newDebt < -0.01 ? `You owe ₹${Math.abs(newDebt).toFixed(2)}` : newDebt <= 0.01 ? 'Settled (₹0.00)' : `Owes ₹${newDebt.toFixed(2)}`}
         </span>
       </div>
@@ -2685,7 +3087,7 @@ class WhoseTabApp {
   }
 
   closeConfirmRepaymentModal() {
-    this.dom.confirmRepaymentModal?.classList.add('hidden');
+    this.closeModalElement(this.dom.confirmRepaymentModal);
   }
 
   getRepaymentSignature(data) {
@@ -2721,6 +3123,10 @@ class WhoseTabApp {
 
   // ================= HARDWARE BACK BUTTON =================
   handleBackPress() {
+    if (this.dom.shopLocationModal && !this.dom.shopLocationModal.classList.contains('hidden')) {
+      this.closeShopLocationModal();
+      return true;
+    }
     if (this.dom.headerOverflowMenu && !this.dom.headerOverflowMenu.classList.contains('hidden')) {
       this.closeHeaderMenu();
       return true;
@@ -2754,11 +3160,11 @@ class WhoseTabApp {
       return true;
     }
     if (this.dom.settleModal && !this.dom.settleModal.classList.contains('hidden')) {
-      this.dom.settleModal.classList.add('hidden');
+      this.closeModalElement(this.dom.settleModal);
       return true;
     }
     if (this.dom.updateModal && !this.dom.updateModal.classList.contains('hidden')) {
-      this.dom.updateModal.classList.add('hidden');
+      this.closeModalElement(this.dom.updateModal);
       return true;
     }
     if (this.dom.setupModal && !this.dom.setupModal.classList.contains('hidden')) {
@@ -2778,7 +3184,7 @@ class WhoseTabApp {
     this.dom.downloadUpdateBtn.textContent = 'Install Update';
     this.dom.updateProgressContainer?.classList.add('hidden');
     if (this.dom.updateProgressBar) this.dom.updateProgressBar.style.width = '0%';
-    this.dom.updateModal.classList.remove('hidden');
+    this.openModalElement(this.dom.updateModal);
   }
 
   onDownloadProgress(percent, currentMb, totalMb) {
@@ -2795,7 +3201,7 @@ class WhoseTabApp {
     if (this.dom.updateProgressBar) this.dom.updateProgressBar.style.width = '100%';
     if (this.dom.updateProgressText) this.dom.updateProgressText.textContent = 'Opening installer...';
     if (this.dom.downloadUpdateBtn) this.dom.downloadUpdateBtn.textContent = 'Installing...';
-    setTimeout(() => this.dom.updateModal?.classList.add('hidden'), 2500);
+    setTimeout(() => this.closeModalElement(this.dom.updateModal), 2500);
   }
 
   onDownloadError(err) {
@@ -3004,14 +3410,14 @@ class WhoseTabApp {
 
         row.innerHTML = `
           <div class="person-left">
-            <span class="act-icon ${isBorrow ? 'is-borrowed' : ''}">${isBorrow ? borrowSvg : receiptSvg}</span>
+            <span class="act-icon ${isBorrow ? 'is-borrowed' : 'is-lent'}">${isBorrow ? borrowSvg : receiptSvg}</span>
             <div class="row-text-stack">
               <span class="row-primary-text">${this.escapeHtml(exp.title)}</span>
               <span class="row-secondary-text">${this.escapeHtml(cpMeta)}${isBorrow ? `From ${this.escapeHtml(names)}` : this.escapeHtml(names)} • ${dateStr}</span>
             </div>
           </div>
           <div class="act-amount-col">
-            <span class="act-amt tabular ${isBorrow ? 'borrowed' : ''}">${isBorrow ? '-' : ''}₹${parseFloat(exp.totalAmount).toFixed(2)}</span>
+            <span class="act-amt tabular ${isBorrow ? 'borrowed' : 'owed'}">${isBorrow ? '-' : ''}₹${parseFloat(exp.totalAmount).toFixed(2)}</span>
             <span class="act-tag tabular">${isBorrow ? `You owe ₹${tabAmt.toFixed(2)}` : `Tab ₹${tabAmt.toFixed(2)}`}</span>
           </div>
         `;
@@ -3096,6 +3502,209 @@ class WhoseTabApp {
       row.addEventListener('click', () => this.openPersonActionsModal(p.id));
       this.dom.contactsFullList.appendChild(row);
     });
+  }
+
+  // ================= GOOGLE MAPS SHOP LOCATION PICKER =================
+  setSelectedEntryLocation(locObj) {
+    if (!locObj || (!locObj.name && !locObj.mapsUrl)) {
+      this.currentEntryLocation = null;
+      this.dom.selectedLocationChip?.classList.add('hidden');
+      this.dom.openLocationPickerBtn?.classList.remove('active');
+      return;
+    }
+
+    this.currentEntryLocation = {
+      name: (locObj.name || 'Shop Location').trim(),
+      address: (locObj.address || '').trim(),
+      lat: parseFloat(locObj.lat) || 0,
+      lng: parseFloat(locObj.lng) || 0,
+      mapsUrl: locObj.mapsUrl || this.buildMapsUrl(locObj)
+    };
+
+    if (this.dom.selectedLocationText) {
+      this.dom.selectedLocationText.textContent = this.currentEntryLocation.address
+        ? `${this.currentEntryLocation.name} • ${this.currentEntryLocation.address}`
+        : this.currentEntryLocation.name;
+    }
+    this.dom.selectedLocationChip?.classList.remove('hidden');
+    this.dom.openLocationPickerBtn?.classList.add('active');
+
+    if (this.dom.snapTitle && !this.dom.snapTitle.value.trim()) {
+      this.dom.snapTitle.value = this.currentEntryLocation.name;
+    }
+  }
+
+  buildMapsUrl(locObj) {
+    const lat = parseFloat(locObj?.lat) || 0;
+    const lng = parseFloat(locObj?.lng) || 0;
+    if (lat !== 0 || lng !== 0) {
+      return `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lng.toFixed(6)}`;
+    }
+    const q = encodeURIComponent((locObj?.name || 'Shops near me').trim());
+    return `https://www.google.com/maps/search/?api=1&query=${q}`;
+  }
+
+  saveShopToDirectory(locObj) {
+    if (!locObj || !locObj.name) return;
+    if (!Array.isArray(this.ledger.savedShops)) this.ledger.savedShops = [];
+    const key = locObj.name.trim().toLowerCase();
+    this.ledger.savedShops = [
+      {
+        name: locObj.name.trim(),
+        address: locObj.address || '',
+        lat: locObj.lat || 0,
+        lng: locObj.lng || 0,
+        mapsUrl: locObj.mapsUrl || this.buildMapsUrl(locObj)
+      },
+      ...this.ledger.savedShops.filter(s => (s.name || '').trim().toLowerCase() !== key)
+    ].slice(0, 40);
+    this.saveLedger();
+  }
+
+  openShopLocationModal() {
+    if (!this.dom.shopLocationModal) return;
+    if (this.dom.shopSearchInput) this.dom.shopSearchInput.value = '';
+    this.onlineShopResults = [];
+    if (this.dom.shopLocationStatus) this.dom.shopLocationStatus.classList.add('hidden');
+    this.renderShopResults();
+    this.openModalElement(this.dom.shopLocationModal);
+    if (this.nearbyShopsCache.length === 0) {
+      this.requestNearbyShops();
+    }
+  }
+
+  closeShopLocationModal() {
+    this.closeModalElement(this.dom.shopLocationModal);
+  }
+
+  openSnapModalWithLocation(locObj) {
+    this.openSnapModal(true, 'split');
+    if (locObj) {
+      this.setSelectedEntryLocation(locObj);
+      if (this.dom.snapTitle) {
+        this.dom.snapTitle.value = locObj.name || 'Shop Purchase';
+      }
+    }
+  }
+
+  requestNearbyShops() {
+    if (!window.AndroidBridge?.requestNearbyShops) {
+      if (this.dom.shopLocationStatus) {
+        this.dom.shopLocationStatus.textContent = 'GPS lookup requires the Android app. Select a saved shop or type a name.';
+        this.dom.shopLocationStatus.classList.remove('hidden');
+      }
+      return;
+    }
+    if (this.dom.shopLocationStatus) {
+      this.dom.shopLocationStatus.textContent = 'Looking up nearby shops from device location...';
+      this.dom.shopLocationStatus.classList.remove('hidden');
+    }
+    try {
+      window.AndroidBridge.requestNearbyShops();
+    } catch (e) {}
+  }
+
+  onNearbyShopsLoaded(lat, lng, shops) {
+    this.lastGeoLat = parseFloat(lat) || 0;
+    this.lastGeoLng = parseFloat(lng) || 0;
+    this.nearbyShopsCache = Array.isArray(shops) ? shops : [];
+    if (this.dom.shopLocationStatus) {
+      if (this.nearbyShopsCache.length > 0) {
+        this.dom.shopLocationStatus.classList.add('hidden');
+      } else {
+        this.dom.shopLocationStatus.textContent = 'No shops found right nearby. Type a shop name or open Google Maps.';
+        this.dom.shopLocationStatus.classList.remove('hidden');
+      }
+    }
+    this.renderShopResults();
+  }
+
+  onNearbyShopsError(message) {
+    if (this.dom.shopLocationStatus) {
+      this.dom.shopLocationStatus.textContent = message || 'Could not get location.';
+      this.dom.shopLocationStatus.classList.remove('hidden');
+    }
+  }
+
+  onShopSearchResults(shops) {
+    this.onlineShopResults = Array.isArray(shops) ? shops : [];
+    this.renderShopResults();
+  }
+
+  renderShopResults() {
+    const container = this.dom.shopResultsList;
+    if (!container) return;
+    const q = (this.dom.shopSearchInput?.value || '').trim();
+    const qLower = q.toLowerCase();
+
+    const candidates = [];
+    const seen = new Set();
+    const pushUnique = (item, badge) => {
+      if (!item || !item.name) return;
+      const k = item.name.trim().toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      candidates.push({ ...item, badge });
+    };
+
+    if (q) {
+      this.onlineShopResults.forEach(s => pushUnique(s, 'Maps Search'));
+      (this.ledger.savedShops || [])
+        .filter(s => `${s.name} ${s.address || ''}`.toLowerCase().includes(qLower))
+        .forEach(s => pushUnique(s, 'Saved'));
+      this.nearbyShopsCache
+        .filter(s => `${s.name} ${s.address || ''}`.toLowerCase().includes(qLower))
+        .forEach(s => pushUnique(s, 'Nearby'));
+      pushUnique({
+        name: q,
+        address: 'Attach with Google Maps search link',
+        lat: this.lastGeoLat || 0,
+        lng: this.lastGeoLng || 0,
+        mapsUrl: this.buildMapsUrl({ name: q, lat: this.lastGeoLat, lng: this.lastGeoLng })
+      }, 'Use');
+    } else {
+      (this.ledger.savedShops || []).forEach(s => pushUnique(s, 'Saved'));
+      this.nearbyShopsCache.forEach(s => pushUnique(s, 'Nearby'));
+      this.ledger.expenses.forEach(exp => {
+        if (exp.location && exp.location.name) pushUnique(exp.location, 'Recent');
+      });
+    }
+
+    container.innerHTML = '';
+    if (candidates.length === 0) {
+      container.innerHTML = '<div class="list-empty-state">Tap Find Nearby or search above to pick a shop.</div>';
+      return;
+    }
+
+    candidates.slice(0, 20).forEach(shop => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'shop-result-item';
+      btn.innerHTML = `
+        <div class="shop-result-meta">
+          <span class="shop-result-name">${this.escapeHtml(shop.name)}</span>
+          <span class="shop-result-address">${this.escapeHtml(shop.address || 'Google Maps Pin')}</span>
+        </div>
+        <span class="chip">${this.escapeHtml(shop.badge || 'Select')}</span>
+      `;
+      btn.addEventListener('click', () => {
+        this.setSelectedEntryLocation(shop);
+        this.closeShopLocationModal();
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  openLocationInMaps(locObj) {
+    if (!locObj) return;
+    const name = locObj.name || '';
+    const lat = parseFloat(locObj.lat) || 0;
+    const lng = parseFloat(locObj.lng) || 0;
+    if (window.AndroidBridge?.openGoogleMaps) {
+      window.AndroidBridge.openGoogleMaps(name, lat, lng);
+    } else {
+      window.open(locObj.mapsUrl || this.buildMapsUrl(locObj), '_blank');
+    }
   }
 }
 

@@ -6,9 +6,16 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.ContactsContract;
 import android.view.View;
 import android.view.Window;
@@ -27,6 +34,12 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.util.List;
 import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -265,6 +278,280 @@ public class MainActivity extends AppCompatActivity {
                     "if(window.app){ window.app.checkScannerStatus(); window.app.checkInitialSetup(); }", null
                 ));
             }
+        } else if (requestCode == 202) {
+            boolean granted = false;
+            if (grantResults != null) {
+                for (int r : grantResults) {
+                    if (r == PackageManager.PERMISSION_GRANTED) {
+                        granted = true;
+                        break;
+                    }
+                }
+            }
+            if (granted) {
+                fetchNearbyShopsWithLocation();
+            } else if (webView != null) {
+                webView.post(() -> webView.evaluateJavascript(
+                    "if(window.app && window.app.onNearbyShopsError){ window.app.onNearbyShopsError('Location permission denied. Search manually or open Google Maps.'); }",
+                    null
+                ));
+            }
+        }
+    }
+
+    // ================= GOOGLE MAPS / NEARBY SHOPS LOCATION HELPER =================
+    @SuppressLint("MissingPermission")
+    public void fetchNearbyShopsWithLocation() {
+        boolean hasFine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        boolean hasCoarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        if (!hasFine && !hasCoarse) {
+            runOnUiThread(() -> ActivityCompat.requestPermissions(
+                this,
+                new String[] { Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION },
+                202
+            ));
+            return;
+        }
+
+        LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+        if (lm == null) {
+            dispatchNearbyError("Location service unavailable on device.");
+            return;
+        }
+
+        Location best = null;
+        try {
+            for (String provider : lm.getProviders(true)) {
+                Location l = lm.getLastKnownLocation(provider);
+                if (l != null && (best == null || l.getTime() > best.getTime())) {
+                    best = l;
+                }
+            }
+        } catch (Exception ignored) {}
+
+        long ageMs = best != null ? (System.currentTimeMillis() - best.getTime()) : Long.MAX_VALUE;
+        if (best != null && ageMs < 10 * 60 * 1000L) {
+            queryOverpassAndGeocoder(best.getLatitude(), best.getLongitude());
+            return;
+        }
+
+        final Location fallbackLoc = best;
+        final Handler timeoutHandler = new Handler(Looper.getMainLooper());
+        final boolean[] resolved = new boolean[] { false };
+        final LocationListener oneShot = new LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                if (resolved[0]) return;
+                resolved[0] = true;
+                timeoutHandler.removeCallbacksAndMessages(null);
+                try { lm.removeUpdates(this); } catch (Exception ignored) {}
+                queryOverpassAndGeocoder(location.getLatitude(), location.getLongitude());
+            }
+        };
+
+        try {
+            String chosen = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+                ? LocationManager.NETWORK_PROVIDER
+                : (lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ? LocationManager.GPS_PROVIDER : null);
+            if (chosen != null) {
+                lm.requestLocationUpdates(chosen, 0L, 0f, oneShot, Looper.getMainLooper());
+                timeoutHandler.postDelayed(() -> {
+                    if (resolved[0]) return;
+                    resolved[0] = true;
+                    try { lm.removeUpdates(oneShot); } catch (Exception ignored) {}
+                    if (fallbackLoc != null) {
+                        queryOverpassAndGeocoder(fallbackLoc.getLatitude(), fallbackLoc.getLongitude());
+                    } else {
+                        dispatchNearbyError("Turn on GPS/Location or type a shop name to search.");
+                    }
+                }, 4000L);
+            } else if (fallbackLoc != null) {
+                queryOverpassAndGeocoder(fallbackLoc.getLatitude(), fallbackLoc.getLongitude());
+            } else {
+                dispatchNearbyError("Location services are turned off.");
+            }
+        } catch (Exception e) {
+            if (fallbackLoc != null) {
+                queryOverpassAndGeocoder(fallbackLoc.getLatitude(), fallbackLoc.getLongitude());
+            } else {
+                dispatchNearbyError("Unable to read location.");
+            }
+        }
+    }
+
+    private void queryOverpassAndGeocoder(double lat, double lng) {
+        new Thread(() -> {
+            JSONArray out = new JSONArray();
+            String areaFallback = "";
+            try {
+                Geocoder geocoder = new Geocoder(this, Locale.getDefault());
+                List<Address> addrs = geocoder.getFromLocation(lat, lng, 2);
+                if (addrs != null && !addrs.isEmpty()) {
+                    Address a = addrs.get(0);
+                    String sub = a.getSubLocality() != null ? a.getSubLocality() : a.getThoroughfare();
+                    String city = a.getLocality();
+                    areaFallback = ((sub != null ? sub : "") + (city != null ? ", " + city : "")).replaceAll("^,\\s*", "");
+                }
+            } catch (Exception ignored) {}
+
+            try {
+                String ql = String.format(
+                    Locale.US,
+                    "[out:json][timeout:6];(node(around:450,%.6f,%.6f)[name][~\"^(shop|amenity)$\"~\"^(supermarket|convenience|bakery|department_store|mall|general|stationery|chemist|cafe|restaurant|fast_food|pharmacy|ice_cream|canteen)$\"];way(around:450,%.6f,%.6f)[name][~\"^(shop|amenity)$\"~\".\"];);out center 12;",
+                    lat, lng, lat, lng
+                );
+                URL url = new URL("https://overpass-api.de/api/interpreter");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                conn.setRequestProperty("User-Agent", "WhoseTab-App");
+                conn.getOutputStream().write(("data=" + URLEncoder.encode(ql, "UTF-8")).getBytes("UTF-8"));
+
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                    br.close();
+                    JSONObject resp = new JSONObject(sb.toString());
+                    JSONArray els = resp.optJSONArray("elements");
+                    if (els != null) {
+                        for (int i = 0; i < els.length(); i++) {
+                            JSONObject el = els.optJSONObject(i);
+                            if (el == null) continue;
+                            JSONObject tags = el.optJSONObject("tags");
+                            if (tags == null) continue;
+                            String name = tags.optString("name", "").trim();
+                            if (name.isEmpty()) continue;
+                            double pLat = el.has("lat") ? el.optDouble("lat", lat) : (el.has("center") ? el.optJSONObject("center").optDouble("lat", lat) : lat);
+                            double pLng = el.has("lon") ? el.optDouble("lon", lng) : (el.has("center") ? el.optJSONObject("center").optDouble("lon", lng) : lng);
+                            String street = tags.optString("addr:street", "");
+                            String addr = !street.isEmpty() ? street : (!areaFallback.isEmpty() ? areaFallback : tags.optString("shop", tags.optString("amenity", "Shop")));
+                            JSONObject shop = new JSONObject();
+                            shop.put("name", name);
+                            shop.put("address", addr);
+                            shop.put("lat", pLat);
+                            shop.put("lng", pLng);
+                            shop.put("mapsUrl", buildGoogleMapsUrl(name, pLat, pLng));
+                            out.put(shop);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            // Always offer current geocoded area pin if named places list was sparse
+            if (out.length() == 0 && !areaFallback.isEmpty()) {
+                try {
+                    JSONObject pin = new JSONObject();
+                    pin.put("name", areaFallback);
+                    pin.put("address", "Current GPS area");
+                    pin.put("lat", lat);
+                    pin.put("lng", lng);
+                    pin.put("mapsUrl", buildGoogleMapsUrl(areaFallback, lat, lng));
+                    out.put(pin);
+                } catch (Exception ignored) {}
+            }
+
+            final JSONArray finalOut = out;
+            if (webView != null) {
+                webView.post(() -> webView.evaluateJavascript(
+                    String.format(Locale.US, "if(window.app && window.app.onNearbyShopsLoaded){ window.app.onNearbyShopsLoaded(%.6f, %.6f, %s); }", lat, lng, finalOut.toString()),
+                    null
+                ));
+            }
+        }).start();
+    }
+
+    public void searchShopsOnline(String query, double lat, double lng) {
+        if (query == null || query.trim().isEmpty()) return;
+        new Thread(() -> {
+            JSONArray out = new JSONArray();
+            try {
+                StringBuilder urlStr = new StringBuilder("https://photon.komoot.io/api/?q=")
+                    .append(URLEncoder.encode(query.trim(), "UTF-8"))
+                    .append("&limit=8");
+                if (lat != 0.0 || lng != 0.0) {
+                    urlStr.append(String.format(Locale.US, "&lat=%.5f&lon=%.5f", lat, lng));
+                }
+                URL url = new URL(urlStr.toString());
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("User-Agent", "WhoseTab-App");
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                    br.close();
+                    JSONObject root = new JSONObject(sb.toString());
+                    JSONArray features = root.optJSONArray("features");
+                    if (features != null) {
+                        for (int i = 0; i < features.length(); i++) {
+                            JSONObject feat = features.optJSONObject(i);
+                            if (feat == null) continue;
+                            JSONObject props = feat.optJSONObject("properties");
+                            JSONObject geom = feat.optJSONObject("geometry");
+                            if (props == null || geom == null) continue;
+                            JSONArray coords = geom.optJSONArray("coordinates");
+                            if (coords == null || coords.length() < 2) continue;
+                            double pLng = coords.optDouble(0, 0.0);
+                            double pLat = coords.optDouble(1, 0.0);
+                            String name = props.optString("name", props.optString("street", "")).trim();
+                            if (name.isEmpty()) continue;
+                            StringBuilder addrSb = new StringBuilder();
+                            String street = props.optString("street", "");
+                            String district = props.optString("district", "");
+                            String city = props.optString("city", "");
+                            if (!street.isEmpty() && !street.equals(name)) addrSb.append(street);
+                            if (!district.isEmpty()) {
+                                if (addrSb.length() > 0) addrSb.append(", ");
+                                addrSb.append(district);
+                            }
+                            if (!city.isEmpty()) {
+                                if (addrSb.length() > 0) addrSb.append(", ");
+                                addrSb.append(city);
+                            }
+                            JSONObject shop = new JSONObject();
+                            shop.put("name", name);
+                            shop.put("address", addrSb.toString());
+                            shop.put("lat", pLat);
+                            shop.put("lng", pLng);
+                            shop.put("mapsUrl", buildGoogleMapsUrl(name, pLat, pLng));
+                            out.put(shop);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            if (webView != null) {
+                webView.post(() -> webView.evaluateJavascript(
+                    "if(window.app && window.app.onShopSearchResults){ window.app.onShopSearchResults(" + out.toString() + "); }",
+                    null
+                ));
+            }
+        }).start();
+    }
+
+    private static String buildGoogleMapsUrl(String name, double lat, double lng) {
+        if (lat != 0.0 || lng != 0.0) {
+            return String.format(Locale.US, "https://www.google.com/maps/search/?api=1&query=%.6f,%.6f", lat, lng);
+        }
+        try {
+            return "https://www.google.com/maps/search/?api=1&query=" + URLEncoder.encode(name, "UTF-8");
+        } catch (Exception e) {
+            return "https://maps.google.com";
+        }
+    }
+
+    private void dispatchNearbyError(String msg) {
+        if (webView != null) {
+            webView.post(() -> webView.evaluateJavascript(
+                "if(window.app && window.app.onNearbyShopsError){ window.app.onNearbyShopsError(" + JSONObject.quote(msg) + "); }",
+                null
+            ));
         }
     }
 
@@ -384,10 +671,45 @@ public class MainActivity extends AppCompatActivity {
             intent.setData(null);
             intent.setAction(null);
         }
-        // 3. System Share Intent
+        // 3. System Share Intent (Google Maps Place OR Payment Text)
         else if (intent != null && Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())) {
             String sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
+            intent.removeExtra(Intent.EXTRA_TEXT);
+            intent.setAction(null);
             if (sharedText != null) {
+                String lowerShared = sharedText.toLowerCase(Locale.US);
+                if (lowerShared.contains("maps.app.goo.gl") || lowerShared.contains("maps.google.")
+                        || lowerShared.contains("goo.gl/maps") || lowerShared.contains("google.com/maps")) {
+                    String[] lines = sharedText.split("\\r?\\n");
+                    String placeName = "";
+                    String placeAddr = "";
+                    String mapsUrl = "";
+                    for (String ln : lines) {
+                        String trimmed = ln.trim();
+                        if (trimmed.isEmpty()) continue;
+                        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                            mapsUrl = trimmed;
+                        } else if (placeName.isEmpty() && !trimmed.toLowerCase(Locale.US).startsWith("shared pin")) {
+                            placeName = trimmed;
+                        } else if (placeAddr.isEmpty() && !trimmed.equals(placeName)) {
+                            placeAddr = trimmed;
+                        }
+                    }
+                    if (!placeName.isEmpty() || !mapsUrl.isEmpty()) {
+                        try {
+                            JSONObject locObj = new JSONObject();
+                            locObj.put("name", !placeName.isEmpty() ? placeName : "Shop Location");
+                            locObj.put("address", placeAddr);
+                            locObj.put("mapsUrl", !mapsUrl.isEmpty() ? mapsUrl : buildGoogleMapsUrl(placeName, 0.0, 0.0));
+                            final String locJson = locObj.toString();
+                            webView.post(() -> webView.evaluateJavascript(
+                                "if(window.app && window.app.openSnapModalWithLocation){ window.app.openSnapModalWithLocation(" + locJson + "); }",
+                                null
+                            ));
+                        } catch (Exception ignored) {}
+                        return;
+                    }
+                }
                 JSONObject parsed = PaytmNotificationListenerService.parseRawText("", sharedText, sharedText);
                 if (parsed != null) {
                     amount = parsed.optDouble("amount", 0.0);
@@ -398,8 +720,6 @@ public class MainActivity extends AppCompatActivity {
                     txnId = parsed.optString("txnId", "");
                 }
             }
-            intent.removeExtra(Intent.EXTRA_TEXT);
-            intent.setAction(null);
         }
 
         if (amount > 0) {

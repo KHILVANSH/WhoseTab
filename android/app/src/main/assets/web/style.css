@@ -40,13 +40,20 @@
   --accent-solid: #2563EB;
   --accent-subtle: rgba(59, 130, 246, 0.14);
 
+  /* Repaid / Money Returned Back = Green */
   --success: #10B981;
   --success-text: #34D399;
   --success-bg: rgba(16, 185, 129, 0.14);
 
+  /* Owed to You / Lent = Red */
   --danger: #EF4444;
   --danger-text: #F87171;
-  --danger-bg: rgba(239, 68, 68, 0.12);
+  --danger-bg: rgba(239, 68, 68, 0.13);
+
+  /* Borrowed / You Owe = Violet */
+  --borrow: #8B5CF6;
+  --borrow-text: #A78BFA;
+  --borrow-bg: rgba(139, 92, 246, 0.14);
 
   --warning: #F59E0B;
   --warning-bg: rgba(245, 158, 11, 0.12);
@@ -74,9 +81,20 @@
   --accent-solid: #1D4ED8;
   --accent-subtle: rgba(37, 99, 235, 0.10);
 
+  /* Repaid / Money Returned Back = Green */
   --success: #059669;
   --success-text: #047857;
   --success-bg: rgba(5, 150, 105, 0.10);
+
+  /* Owed to You / Lent = Red */
+  --danger: #DC2626;
+  --danger-text: #DC2626;
+  --danger-bg: rgba(220, 38, 38, 0.09);
+
+  /* Borrowed / You Owe = Violet */
+  --borrow: #7C3AED;
+  --borrow-text: #7C3AED;
+  --borrow-bg: rgba(124, 58, 237, 0.10);
 
   --danger: #DC2626;
   --danger-text: #B91C1C;
@@ -296,6 +314,36 @@ body {
   display: block;
 }
 
+.tab-view.anim-enter-right {
+  animation: tabSlideFromRight 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tab-view.anim-enter-left {
+  animation: tabSlideFromLeft 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes tabSlideFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes tabSlideFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* ================= Net Balance Hero Card ================= */
 .balance-hero-card {
   background-color: var(--bg-surface);
@@ -331,7 +379,7 @@ body {
 }
 
 .hero-amount.has-owed {
-  color: var(--success-text);
+  color: var(--danger-text);
 }
 
 .hero-footer {
@@ -554,11 +602,15 @@ body {
 }
 
 .balance-amt.positive {
-  color: var(--success-text);
+  color: var(--danger-text);
 }
 
 .balance-amt.negative {
-  color: var(--danger-text);
+  color: var(--borrow-text);
+}
+
+.balance-amt.repaid {
+  color: var(--success-text);
 }
 
 .balance-amt.zero {
@@ -596,6 +648,11 @@ body {
   flex-shrink: 0;
 }
 
+.act-icon.is-lent {
+  background-color: var(--danger-bg);
+  color: var(--danger-text);
+}
+
 .act-icon.is-repayment {
   background-color: var(--success-bg);
   color: var(--success-text);
@@ -610,6 +667,10 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.act-amt.owed {
+  color: var(--danger-text);
 }
 
 .act-amt.repaid {
@@ -794,7 +855,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  animation: toastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: toastSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 1, 1), opacity 0.2s ease;
+}
+
+.quick-toast-card.closing {
+  opacity: 0;
+  transform: translateX(115%);
+  pointer-events: none;
 }
 
 @keyframes toastSlideIn {
@@ -948,6 +1016,23 @@ body {
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  animation: backdropFadeIn 0.18s ease-out both;
+  transition: opacity 0.18s ease;
+}
+
+.modal-backdrop.closing {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-backdrop.closing .modal-sheet {
+  transform: translateY(100%);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 1, 1);
+}
+
+@keyframes backdropFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 #addPersonModal {
@@ -1256,7 +1341,11 @@ body {
 .breakdown-total {
   font-size: 13px;
   font-weight: 600;
-  color: var(--success-text);
+  color: var(--danger-text);
+}
+
+.breakdown-total.borrowed {
+  color: var(--borrow-text);
 }
 
 .breakdown-rows {
@@ -1437,13 +1526,20 @@ body {
   color: var(--text-primary);
 }
 
-.repayment-calc-val.positive {
+.repayment-calc-val.positive,
+.repayment-calc-val.repaid {
   color: var(--success-text);
   font-weight: 600;
 }
 
-.repayment-calc-val.negative {
+.repayment-calc-val.negative,
+.repayment-calc-val.owed {
   color: var(--danger-text);
+  font-weight: 600;
+}
+
+.repayment-calc-val.borrowed {
+  color: var(--borrow-text);
   font-weight: 600;
 }
 
@@ -1586,6 +1682,10 @@ body {
 
 .text-danger {
   color: var(--danger-text);
+}
+
+.text-borrow {
+  color: var(--borrow-text);
 }
 
 .text-center {
@@ -1777,16 +1877,16 @@ body {
 }
 
 .hero-amount.has-owe {
-  color: var(--danger-text);
+  color: var(--borrow-text);
 }
 
 .act-icon.is-borrowed {
-  background-color: var(--danger-bg);
-  color: var(--danger-text);
+  background-color: var(--borrow-bg);
+  color: var(--borrow-text);
 }
 
 .act-amt.borrowed {
-  color: var(--danger-text);
+  color: var(--borrow-text);
 }
 
 .text-accent {
@@ -1944,4 +2044,127 @@ body {
 
 .mb-1 {
   margin-bottom: 4px;
+}
+
+/* ================= Google Maps Location Picker & Repayment Match ================= */
+.title-location-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-location-row .form-input {
+  flex: 1;
+}
+
+.btn-location-pin {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-hairline);
+  background-color: var(--bg-surface-2);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.btn-location-pin:hover,
+.btn-location-pin.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.selected-location-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 5px 10px;
+  border-radius: var(--r-full);
+  background-color: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  color: var(--text-primary);
+  font-size: 12px;
+  max-width: 100%;
+}
+
+.selected-location-chip span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.repayment-guess-badge {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background-color: var(--success-bg);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: var(--success-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.shop-picker-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.shop-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.shop-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background-color: var(--bg-surface-2);
+  border: 1px solid var(--border-hairline);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.shop-result-item:active {
+  border-color: var(--accent);
+}
+
+.shop-result-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.shop-result-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shop-result-address {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

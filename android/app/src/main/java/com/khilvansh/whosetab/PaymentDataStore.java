@@ -21,6 +21,7 @@ public class PaymentDataStore {
     private static final String KEY_SYNCED_CONTACTS = "synced_contacts_json";
     private static final String KEY_QUEUED_QUICK_EXPENSES = "queued_quick_expenses_json";
     private static final String KEY_RECENT_DETECTIONS = "recent_detected_events_json";
+    private static final String KEY_PENDING_UNLOCK_POPUP = "pending_unlock_popup_json";
     public static final String KEY_DETECTION_MODE = "payment_detection_mode"; // "overlay" | "open_app" | "notification"
 
     /**
@@ -354,10 +355,30 @@ public class PaymentDataStore {
         prefs.edit()
             .remove(KEY_PENDING_PAYMENT)
             .remove(KEY_PENDING_REPAYMENT)
+            .remove(KEY_PENDING_UNLOCK_POPUP)
             .remove(KEY_DISMISSED_PAYMENTS)
             .remove(KEY_DISMISSED_REPAYMENTS)
             .putString(KEY_QUEUED_QUICK_EXPENSES, "[]")
             .putString(KEY_RECENT_DETECTIONS, "[]")
             .apply();
+    }
+
+    public static synchronized void setPendingUnlockPopup(Context context, JSONObject data) {
+        if (context == null || data == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putString(KEY_PENDING_UNLOCK_POPUP, data.toString()).apply();
+    }
+
+    public static synchronized JSONObject consumePendingUnlockPopup(Context context) {
+        if (context == null) return null;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String raw = prefs.getString(KEY_PENDING_UNLOCK_POPUP, null);
+        prefs.edit().remove(KEY_PENDING_UNLOCK_POPUP).apply();
+        if (raw == null || raw.isEmpty()) return null;
+        try {
+            return new JSONObject(raw);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
