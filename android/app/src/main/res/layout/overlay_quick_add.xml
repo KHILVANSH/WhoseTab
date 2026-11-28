@@ -135,4 +135,19 @@
             android:textSize="12sp"
             android:textStyle="bold" />
     </LinearLayout>
+
+    <!-- Bottom Reverse Countdown Progress Bar -->
+    <FrameLayout
+        android:id="@+id/overlayTimerTrack"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_marginTop="10dp"
+        android:background="#1F2937">
+
+        <View
+            android:id="@+id/overlayTimerFill"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#3B82F6" />
+    </FrameLayout>
 </LinearLayout>

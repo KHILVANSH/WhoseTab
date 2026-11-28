@@ -1,5 +1,6 @@
 package com.khilvansh.whosetab;
 
+import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
@@ -12,6 +13,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.LinearInterpolator;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -84,17 +86,38 @@ public class QuickAddCardBinder {
             .setInterpolator(new DecelerateInterpolator())
             .start();
 
+        View timerTrack = root.findViewById(R.id.overlayTimerTrack);
+        View timerFill = root.findViewById(R.id.overlayTimerFill);
+        final ObjectAnimator[] timerAnim = new ObjectAnimator[] { null };
+
         final AtomicBoolean dismissedFlag = new AtomicBoolean(false);
         final Handler timerHandler = new Handler(Looper.getMainLooper());
         final Runnable hideTask = () -> {
             if (dismissedFlag.compareAndSet(false, true)) {
+                if (timerAnim[0] != null) timerAnim[0].cancel();
                 animateOutAndDismiss(context, root, false, onDismiss);
             }
+        };
+        final Runnable startBarAnim = () -> {
+            if (timerFill == null || timerTrack == null) return;
+            timerFill.post(() -> {
+                if (dismissedFlag.get()) return;
+                if (timerAnim[0] != null) timerAnim[0].cancel();
+                float w = timerTrack.getWidth();
+                if (w > 0) timerFill.setPivotX(w);
+                timerFill.setScaleX(1f);
+                ObjectAnimator anim = ObjectAnimator.ofFloat(timerFill, "scaleX", 1f, 0f);
+                anim.setDuration(AUTO_HIDE_MS);
+                anim.setInterpolator(new LinearInterpolator());
+                anim.start();
+                timerAnim[0] = anim;
+            });
         };
         final Runnable resetTimer = () -> {
             if (dismissedFlag.get()) return;
             timerHandler.removeCallbacks(hideTask);
             timerHandler.postDelayed(hideTask, AUTO_HIDE_MS);
+            startBarAnim.run();
         };
         resetTimer.run();
 
@@ -120,6 +143,7 @@ public class QuickAddCardBinder {
             public void onViewAttachedToWindow(View v) {}
             @Override
             public void onViewDetachedFromWindow(View v) {
+                if (timerAnim[0] != null) timerAnim[0].cancel();
                 timerHandler.removeCallbacksAndMessages(null);
             }
         });

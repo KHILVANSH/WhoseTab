@@ -361,11 +361,19 @@
             <div class="grouped-list settings-group">
               <div class="settings-row">
                 <div class="settings-row-info">
-                  <span class="row-title">Version <span id="appVersionDisplay" class="text-muted">v1.3.1</span></span>
+                  <span class="row-title">Version <span id="appVersionDisplay" class="text-muted">v1.3.2</span></span>
                   <span class="row-subtitle" id="updateStatusNotice">Stored locally on device</span>
                 </div>
                 <button type="button" id="checkForUpdatesBtn" class="btn-status-action">Check</button>
               </div>
+
+              <label class="settings-row interactive-row" for="autoUpdateToggle">
+                <div class="settings-row-info">
+                  <span class="row-title">Update Notifications</span>
+                  <span class="row-subtitle">Notify in background when a new release is ready</span>
+                </div>
+                <input type="checkbox" id="autoUpdateToggle" class="toggle-switch" checked>
+              </label>
 
               <button type="button" id="exportDataBtn" class="settings-row interactive-row">
                 <span class="row-title">Export JSON Backup</span>
@@ -424,6 +432,27 @@
       <div class="qt-actions">
         <button type="button" id="qtSecondaryBtn" class="qt-btn qt-btn-secondary">Edit</button>
         <button type="button" id="qtPrimaryBtn" class="qt-btn qt-btn-primary">Quick Add</button>
+      </div>
+      <div class="toast-countdown-track">
+        <div id="qtCountdownFill" class="toast-countdown-fill"></div>
+      </div>
+    </aside>
+
+    <!-- Bottom-Right In-App Update Available Toast -->
+    <aside id="inAppUpdateToast" class="quick-toast-card update-toast hidden" role="status" aria-live="polite">
+      <div class="qt-header">
+        <div class="qt-title-block">
+          <div class="qt-amount" id="utVersionTitle">Update Ready</div>
+          <div class="qt-merchant" id="utSummarySubtitle">Tap to review changelog and install</div>
+        </div>
+        <button type="button" id="utCloseBtn" class="qt-close-btn" aria-label="Dismiss">✕</button>
+      </div>
+      <div class="qt-actions">
+        <button type="button" id="utChangelogBtn" class="qt-btn qt-btn-secondary">Changelog</button>
+        <button type="button" id="utInstallBtn" class="qt-btn qt-btn-primary">Install</button>
+      </div>
+      <div class="toast-countdown-track">
+        <div id="utCountdownFill" class="toast-countdown-fill"></div>
       </div>
     </aside>
 
@@ -1000,8 +1029,8 @@
           <button type="button" id="closeUpdateModalBtn" class="btn-close">✕</button>
         </div>
         <div>
-          <div class="row-title" id="updateVersionTitle">WhoseTab v1.3.1</div>
-          <div class="text-xs text-muted mt-1" id="updateReleaseNotes">Improvements and bug fixes.</div>
+          <div class="row-title" id="updateVersionTitle">WhoseTab v1.3.2</div>
+          <div class="changelog-box mt-2" id="updateReleaseNotes">Improvements and bug fixes.</div>
 
           <div id="updateProgressContainer" class="mt-3 hidden">
             <div class="progress-bar-wrap">

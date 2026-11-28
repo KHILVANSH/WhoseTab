@@ -306,10 +306,20 @@ public class WebAppInterface {
         }
     }
 
-    // --- GITHUB RELEASE VERSION ---
+    // --- GITHUB RELEASE VERSION & AUTO-UPDATE SETTING ---
     @JavascriptInterface
     public String getAppVersion() {
         return UpdateManager.getCurrentVersion(activity);
+    }
+
+    @JavascriptInterface
+    public boolean isAutoUpdateEnabled() {
+        return PaymentDataStore.isAutoUpdateEnabled(activity);
+    }
+
+    @JavascriptInterface
+    public void setAutoUpdateEnabled(boolean enabled) {
+        PaymentDataStore.setAutoUpdateEnabled(activity, enabled);
     }
 
     // --- PENDING PAYMENT BRIDGE ---
@@ -367,10 +377,10 @@ public class WebAppInterface {
             public void onUpdateFound(String latestVersion, String apkUrl, String releaseNotes) {
                 activity.runOnUiThread(() -> {
                     String js = String.format(
-                        "if(window.app && window.app.showUpdatePrompt){ window.app.showUpdatePrompt('%s', '%s', '%s'); }",
-                        latestVersion,
-                        apkUrl,
-                        releaseNotes.replace("'", "\\'").replace("\n", " ")
+                        "if(window.app && window.app.showUpdatePrompt){ window.app.showUpdatePrompt(%s, %s, %s); }",
+                        JSONObject.quote(latestVersion),
+                        JSONObject.quote(apkUrl),
+                        JSONObject.quote(releaseNotes != null ? releaseNotes : "")
                     );
                     webView.evaluateJavascript(js, null);
                 });
@@ -388,7 +398,10 @@ public class WebAppInterface {
             public void onError(String errorMessage) {
                 activity.runOnUiThread(() -> {
                     Toast.makeText(activity, "Update check failed: " + errorMessage, Toast.LENGTH_SHORT).show();
-                    webView.evaluateJavascript("if(window.app && window.app.onUpdateError){ window.app.onUpdateError('" + errorMessage.replace("'", "\\'") + "'); }", null);
+                    webView.evaluateJavascript(
+                        "if(window.app && window.app.onUpdateError){ window.app.onUpdateError(" + JSONObject.quote(errorMessage) + "); }",
+                        null
+                    );
                 });
             }
         });

@@ -117,6 +117,28 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public static void dispatchUpdateAvailableToWeb(String version, String apkUrl, String notes) {
+        MainActivity inst = activeInstance;
+        if (inst != null && inst.webView != null) {
+            inst.runOnUiThread(() -> {
+                String js = String.format(
+                    "(function() { " +
+                    "  var u = { version: %s, apkUrl: %s, notes: %s }; " +
+                    "  if (window.app && typeof window.app.showInAppUpdateToast === 'function') { " +
+                    "    window.app.showInAppUpdateToast(u.version, u.apkUrl, u.notes); " +
+                    "  } else { " +
+                    "    window._pendingUpdateToast = u; " +
+                    "  } " +
+                    "})();",
+                    JSONObject.quote(version != null ? version : ""),
+                    JSONObject.quote(apkUrl != null ? apkUrl : ""),
+                    JSONObject.quote(notes != null ? notes : "")
+                );
+                inst.webView.evaluateJavascript(js, null);
+            });
+        }
+    }
+
     public static void dispatchFromServiceIfVisible(JSONObject payload, boolean isRepayment) {
         MainActivity inst = activeInstance;
         if (inst != null && isActivityForeground) {
@@ -640,6 +662,27 @@ public class MainActivity extends AppCompatActivity {
         String category = "General";
         String txnId = "";
         long postTime = 0L;
+
+        // 0. Open Update Changelog Prompt from notification tap
+        if (intent != null && intent.getBooleanExtra("open_update_modal", false)) {
+            String uVer = intent.getStringExtra("update_version");
+            String uUrl = intent.getStringExtra("update_apk_url");
+            String uNotes = intent.getStringExtra("update_notes");
+            intent.removeExtra("open_update_modal");
+            if (uVer != null && !uVer.isEmpty() && webView != null) {
+                final String fVer = uVer;
+                final String fUrl = uUrl != null ? uUrl : "";
+                final String fNotes = uNotes != null ? uNotes : "";
+                webView.post(() -> webView.evaluateJavascript(
+                    String.format(
+                        "(function(){ var u={v:%s,u:%s,n:%s}; if(window.app&&window.app.showUpdatePrompt){ window.app.showUpdatePrompt(u.v,u.u,u.n); } else { window._pendingUpdateModal=u; } })();",
+                        JSONObject.quote(fVer), JSONObject.quote(fUrl), JSONObject.quote(fNotes)
+                    ),
+                    null
+                ));
+                return;
+            }
+        }
 
         // 1. Outgoing Payment extras
         if (intent != null && intent.hasExtra("paytm_amount")) {

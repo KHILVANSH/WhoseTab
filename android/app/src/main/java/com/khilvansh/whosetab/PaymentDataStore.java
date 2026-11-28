@@ -23,6 +23,8 @@ public class PaymentDataStore {
     private static final String KEY_RECENT_DETECTIONS = "recent_detected_events_json";
     private static final String KEY_PENDING_UNLOCK_POPUP = "pending_unlock_popup_json";
     public static final String KEY_DETECTION_MODE = "payment_detection_mode"; // "overlay" | "open_app" | "notification"
+    private static final String KEY_AUTO_UPDATE_ENABLED = "auto_update_notifications_enabled";
+    private static final String KEY_NOTIFIED_UPDATE_VERSION = "last_notified_update_version";
 
     /**
      * Instance-scoped signature so dismissing one ₹20 payment never blocks
@@ -380,5 +382,29 @@ public class PaymentDataStore {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    public static boolean isAutoUpdateEnabled(Context context) {
+        if (context == null) return true;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getBoolean(KEY_AUTO_UPDATE_ENABLED, true);
+    }
+
+    public static void setAutoUpdateEnabled(Context context, boolean enabled) {
+        if (context == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putBoolean(KEY_AUTO_UPDATE_ENABLED, enabled).apply();
+    }
+
+    public static String getLastNotifiedUpdateVersion(Context context) {
+        if (context == null) return "";
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getString(KEY_NOTIFIED_UPDATE_VERSION, "");
+    }
+
+    public static void setLastNotifiedUpdateVersion(Context context, String version) {
+        if (context == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putString(KEY_NOTIFIED_UPDATE_VERSION, version != null ? version : "").apply();
     }
 }

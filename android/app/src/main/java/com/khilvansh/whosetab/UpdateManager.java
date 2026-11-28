@@ -1,14 +1,20 @@
 package com.khilvansh.whosetab;
 
 import android.app.Activity;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.provider.Settings;
 import android.widget.Toast;
+import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -24,7 +30,9 @@ public class UpdateManager {
 
     public static final String GITHUB_REPO_API = "https://api.github.com/repos/KHILVANSH/WhoseTab/releases/latest";
     private static final String KEY_LAST_SILENT_CHECK = "last_silent_update_check_ms";
-    private static final long SILENT_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L;
+    private static final long SILENT_CHECK_INTERVAL_MS = 6L * 60L * 60L * 1000L;
+    private static final String CHANNEL_ID_UPDATES = "whosetab_app_updates";
+    private static final int UPDATE_NOTIFICATION_ID = 1002;
 
     public interface UpdateCheckCallback {
         void onUpdateFound(String latestVersion, String apkUrl, String releaseNotes);
@@ -35,14 +43,14 @@ public class UpdateManager {
     public static String getCurrentVersion(Context context) {
         try {
             PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
-            return pInfo.versionName != null ? pInfo.versionName : "1.3.1";
+            return pInfo.versionName != null ? pInfo.versionName : "1.3.2";
         } catch (Exception e) {
-            return "1.3.1";
+            return "1.3.2";
         }
     }
 
     public static void checkSilentlyOnLaunch(Context context) {
-        if (context == null) return;
+        if (context == null || !PaymentDataStore.isAutoUpdateEnabled(context)) return;
         android.content.SharedPreferences prefs = context.getSharedPreferences(PaymentDataStore.PREFS_NAME, Context.MODE_PRIVATE);
         long lastCheck = prefs.getLong(KEY_LAST_SILENT_CHECK, 0L);
         long now = System.currentTimeMillis();
@@ -50,18 +58,71 @@ public class UpdateManager {
             return;
         }
         prefs.edit().putLong(KEY_LAST_SILENT_CHECK, now).apply();
-        new Thread(() -> {
-            try {
-                checkForUpdates(context, new UpdateCheckCallback() {
-                    @Override
-                    public void onUpdateFound(String latestVersion, String apkUrl, String releaseNotes) {}
-                    @Override
-                    public void onUpToDate(String currentVersion) {}
-                    @Override
-                    public void onError(String errorMessage) {}
-                });
-            } catch (Exception ignored) {}
-        }).start();
+        checkForUpdates(context, new UpdateCheckCallback() {
+            @Override
+            public void onUpdateFound(String latestVersion, String apkUrl, String releaseNotes) {
+                if (PaymentDataStore.isAutoUpdateEnabled(context)) {
+                    showUpdateNotification(context, latestVersion, apkUrl, releaseNotes);
+                }
+                MainActivity.dispatchUpdateAvailableToWeb(latestVersion, apkUrl, releaseNotes);
+            }
+            @Override
+            public void onUpToDate(String currentVersion) {}
+            @Override
+            public void onError(String errorMessage) {}
+        });
+    }
+
+    public static void showUpdateNotification(Context context, String version, String apkUrl, String releaseNotes) {
+        if (context == null || version == null || version.isEmpty()) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                return;
+            }
+        }
+        if (version.equals(PaymentDataStore.getLastNotifiedUpdateVersion(context))) {
+            return;
+        }
+
+        try {
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel ch = new NotificationChannel(
+                    CHANNEL_ID_UPDATES,
+                    "App Updates",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                );
+                ch.setDescription("Notifies when a new WhoseTab release is available");
+                nm.createNotificationChannel(ch);
+            }
+
+            Intent tapIntent = new Intent(context, MainActivity.class);
+            tapIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            tapIntent.putExtra("open_update_modal", true);
+            tapIntent.putExtra("update_version", version);
+            tapIntent.putExtra("update_apk_url", apkUrl != null ? apkUrl : "");
+            tapIntent.putExtra("update_notes", releaseNotes != null ? releaseNotes : "");
+
+            PendingIntent pi = PendingIntent.getActivity(
+                context,
+                UPDATE_NOTIFICATION_ID,
+                tapIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+            );
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID_UPDATES)
+                .setSmallIcon(R.drawable.ic_stat_whosetab)
+                .setContentTitle("WhoseTab v" + version + " Available")
+                .setContentText("Tap to view changes and install update")
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(pi);
+
+            nm.notify(UPDATE_NOTIFICATION_ID, builder.build());
+            PaymentDataStore.setLastNotifiedUpdateVersion(context, version);
+        } catch (Exception ignored) {}
     }
 
     public static void checkForUpdates(Context context, UpdateCheckCallback callback) {

@@ -46,6 +46,10 @@ class WhoseTabApp {
     this.onlineShopResults = [];
     this.modalCloseTimers = new WeakMap();
     this.toastCloseTimer = null;
+    this.quickToastAutoTimer = null;
+    this.updateToastTimer = null;
+    this.updateToastCloseTimer = null;
+    this.pendingUpdateInfo = null;
 
     this.ledger = this.loadLedger();
 
@@ -59,6 +63,7 @@ class WhoseTabApp {
     this.checkInitialSetup();
     this.checkUrlParameters();
     this.checkPendingPayment();
+    this.checkPendingUpdatePrompts();
     this.render();
   }
 
@@ -260,6 +265,7 @@ class WhoseTabApp {
       appVersionDisplay: document.getElementById('appVersionDisplay'),
       updateStatusNotice: document.getElementById('updateStatusNotice'),
       checkForUpdatesBtn: document.getElementById('checkForUpdatesBtn'),
+      autoUpdateToggle: document.getElementById('autoUpdateToggle'),
       exportDataBtn: document.getElementById('exportDataBtn'),
       importDataBtn: document.getElementById('importDataBtn'),
       importFileInput: document.getElementById('importFileInput'),
@@ -273,6 +279,15 @@ class WhoseTabApp {
       qtContactsRow: document.getElementById('qtContactsRow'),
       qtSecondaryBtn: document.getElementById('qtSecondaryBtn'),
       qtPrimaryBtn: document.getElementById('qtPrimaryBtn'),
+      qtCountdownFill: document.getElementById('qtCountdownFill'),
+
+      inAppUpdateToast: document.getElementById('inAppUpdateToast'),
+      utVersionTitle: document.getElementById('utVersionTitle'),
+      utSummarySubtitle: document.getElementById('utSummarySubtitle'),
+      utCloseBtn: document.getElementById('utCloseBtn'),
+      utChangelogBtn: document.getElementById('utChangelogBtn'),
+      utInstallBtn: document.getElementById('utInstallBtn'),
+      utCountdownFill: document.getElementById('utCountdownFill'),
 
       navItems: document.querySelectorAll('.bottom-nav .nav-item'),
       tabViews: document.querySelectorAll('.tab-view'),
@@ -455,7 +470,7 @@ class WhoseTabApp {
         }
       } catch (e) {}
     }
-    this.dom.appVersionDisplay.textContent = 'v1.3.1';
+    this.dom.appVersionDisplay.textContent = 'v1.3.2';
   }
 
   // ================= SCANNER STATUS & PERMISSIONS =================
@@ -536,6 +551,13 @@ class WhoseTabApp {
       clearTimeout(prevTimer);
       this.modalCloseTimers.delete(el);
     }
+    const sheet = el.querySelector('.modal-sheet');
+    if (sheet) {
+      sheet.classList.remove('dragging');
+      sheet.style.transform = '';
+      sheet.style.transition = '';
+    }
+    el.style.opacity = '';
     el.classList.remove('closing');
     el.classList.remove('hidden');
   }
@@ -547,14 +569,122 @@ class WhoseTabApp {
     }
     const prevTimer = this.modalCloseTimers?.get(el);
     if (prevTimer) clearTimeout(prevTimer);
+    const sheet = el.querySelector('.modal-sheet');
+    if (sheet) {
+      sheet.classList.remove('dragging');
+      sheet.style.transform = '';
+      sheet.style.transition = '';
+    }
+    el.style.opacity = '';
     el.classList.add('closing');
     const timer = setTimeout(() => {
       el.classList.add('hidden');
       el.classList.remove('closing');
+      el.style.opacity = '';
+      if (sheet) {
+        sheet.style.transform = '';
+        sheet.style.transition = '';
+      }
       this.modalCloseTimers?.delete(el);
       if (typeof onAfterHide === 'function') onAfterHide();
     }, 180);
     this.modalCloseTimers?.set(el, timer);
+  }
+
+  initModalSwipeToDismiss() {
+    const closeHandlers = {
+      setupModal: () => this.closeSetupModal(),
+      recentDetectionsModal: () => this.closeRecentDetectionsModal(),
+      personActionsModal: () => this.closePersonActionsModal(),
+      activityDetailModal: () => this.closeActivityDetailModal(),
+      snapExpenseModal: () => this.closeSnapModal(),
+      addPersonModal: () => this.closeAddPersonModal(),
+      editPersonModal: () => this.closeEditPersonModal(),
+      settleModal: () => this.closeModalElement(this.dom.settleModal),
+      confirmRepaymentModal: () => this.closeConfirmRepaymentModal(),
+      shopLocationModal: () => this.closeShopLocationModal(),
+      updateModal: () => this.closeModalElement(this.dom.updateModal)
+    };
+
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+      const sheet = backdrop.querySelector('.modal-sheet');
+      if (!sheet) return;
+      const closeFn = closeHandlers[backdrop.id] || (() => this.closeModalElement(backdrop));
+
+      let startY = 0;
+      let startTime = 0;
+      let dragging = false;
+      let allowPull = false;
+      let lastDy = 0;
+
+      sheet.addEventListener('touchstart', (e) => {
+        if (!e.touches || e.touches.length !== 1) return;
+        const t = e.target;
+        if (t && ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) && !t.closest('.sheet-handle')) {
+          allowPull = false;
+          return;
+        }
+        const fromHandleOrHeader = Boolean(t && t.closest('.sheet-handle, .modal-header'));
+        allowPull = fromHandleOrHeader || sheet.scrollTop <= 2;
+        if (!allowPull) return;
+        startY = e.touches[0].clientY;
+        startTime = Date.now();
+        dragging = false;
+        lastDy = 0;
+      }, { passive: true });
+
+      sheet.addEventListener('touchmove', (e) => {
+        if (!allowPull || !e.touches || e.touches.length !== 1) return;
+        const dy = e.touches[0].clientY - startY;
+        if (!dragging) {
+          if (dy > 8 && (sheet.scrollTop <= 2 || (e.target && e.target.closest('.sheet-handle, .modal-header')))) {
+            dragging = true;
+            sheet.classList.add('dragging');
+          } else if (dy < -8) {
+            allowPull = false;
+            return;
+          } else {
+            return;
+          }
+        }
+        if (dy > 0) {
+          if (e.cancelable) e.preventDefault();
+          lastDy = dy;
+          sheet.style.transform = `translateY(${dy}px)`;
+          backdrop.style.opacity = String(Math.max(0.25, 1 - dy / 380));
+        }
+      }, { passive: false });
+
+      const finishTouch = () => {
+        if (!dragging) {
+          allowPull = false;
+          return;
+        }
+        dragging = false;
+        allowPull = false;
+        sheet.classList.remove('dragging');
+        const dt = Date.now() - startTime;
+        const shouldClose = lastDy > 82 || (lastDy > 36 && dt < 220);
+
+        if (shouldClose) {
+          sheet.style.transition = 'transform 0.16s cubic-bezier(0.4, 0, 1, 1)';
+          sheet.style.transform = 'translateY(100%)';
+          backdrop.style.opacity = '0';
+          setTimeout(() => closeFn(), 130);
+        } else {
+          sheet.style.transition = 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1)';
+          sheet.style.transform = '';
+          backdrop.style.opacity = '';
+          setTimeout(() => {
+            sheet.style.transition = '';
+          }, 190);
+        }
+        lastDy = 0;
+      };
+
+      sheet.addEventListener('touchend', finishTouch, { passive: true });
+      sheet.addEventListener('touchcancel', finishTouch, { passive: true });
+    });
   }
 
   openSetupModal() {
@@ -721,7 +851,23 @@ class WhoseTabApp {
 
     this.dom.testOverlaySettingsBtn?.addEventListener('click', () => this.triggerQuickAddPreview());
     this.dom.checkForUpdatesBtn?.addEventListener('click', () => this.triggerUpdateCheck());
+
+    if (this.dom.autoUpdateToggle) {
+      const enabled = window.AndroidBridge?.isAutoUpdateEnabled
+        ? Boolean(window.AndroidBridge.isAutoUpdateEnabled())
+        : localStorage.getItem('whosetab_auto_update') !== 'false';
+      this.dom.autoUpdateToggle.checked = enabled;
+      this.dom.autoUpdateToggle.addEventListener('change', (e) => {
+        const nextVal = Boolean(e.target.checked);
+        localStorage.setItem('whosetab_auto_update', String(nextVal));
+        window.AndroidBridge?.setAutoUpdateEnabled?.(nextVal);
+      });
+    }
+
     this.dom.closeUpdateModalBtn?.addEventListener('click', () => this.closeModalElement(this.dom.updateModal));
+    this.dom.updateModal?.addEventListener('click', (e) => {
+      if (e.target === this.dom.updateModal) this.closeModalElement(this.dom.updateModal);
+    });
 
     this.dom.downloadUpdateBtn?.addEventListener('click', () => {
       const apkUrl = this.dom.downloadUpdateBtn.dataset.apkUrl;
@@ -736,6 +882,26 @@ class WhoseTabApp {
         this.closeModalElement(this.dom.updateModal);
       }
     });
+
+    // In-App Update Toast Actions
+    this.dom.utCloseBtn?.addEventListener('click', () => this.hideInAppUpdateToast());
+    this.dom.utChangelogBtn?.addEventListener('click', () => {
+      const info = this.pendingUpdateInfo;
+      this.hideInAppUpdateToast();
+      if (info) this.showUpdatePrompt(info.version, info.apkUrl, info.notes);
+    });
+    this.dom.utInstallBtn?.addEventListener('click', () => {
+      const info = this.pendingUpdateInfo;
+      this.hideInAppUpdateToast();
+      if (info) {
+        this.showUpdatePrompt(info.version, info.apkUrl, info.notes);
+        if (window.AndroidBridge?.downloadAndInstallUpdate && info.apkUrl) {
+          this.dom.downloadUpdateBtn?.click();
+        }
+      }
+    });
+
+    this.initModalSwipeToDismiss();
 
     // Bottom Navigation with directional slide transitions
     const navList = Array.from(this.dom.navItems);
@@ -1409,7 +1575,24 @@ class WhoseTabApp {
     };
   }
 
-  // ================= BOTTOM-RIGHT IN-APP QUICK TOAST =================
+  // ================= BOTTOM-RIGHT IN-APP QUICK TOAST & UPDATE TOAST =================
+  startToastCountdownBar(fillEl, durationMs) {
+    if (!fillEl) return;
+    fillEl.style.animation = 'none';
+    if (typeof fillEl.offsetWidth === 'number') void fillEl.offsetWidth;
+    fillEl.style.animation = `toastTimerShrink ${durationMs}ms linear forwards`;
+  }
+
+  resetQuickToastTimer() {
+    if (this.quickToastAutoTimer) clearTimeout(this.quickToastAutoTimer);
+    const DURATION_MS = 12000;
+    this.startToastCountdownBar(this.dom.qtCountdownFill, DURATION_MS);
+    this.quickToastAutoTimer = setTimeout(() => {
+      this.quickToastAutoTimer = null;
+      this.hideInAppQuickToast(true);
+    }, DURATION_MS);
+  }
+
   showInAppQuickToast(data) {
     if (!data || !this.dom.inAppQuickToast) return;
     this.detectedPaytmData = data;
@@ -1438,6 +1621,7 @@ class WhoseTabApp {
           chip.className = `qt-chip ${this.toastSelectedIds.has(p.id) ? 'selected' : ''}`;
           chip.textContent = p.name.split(' ')[0];
           chip.addEventListener('click', () => {
+            this.resetQuickToastTimer();
             if (this.toastSelectedIds.has(p.id)) {
               this.toastSelectedIds.delete(p.id);
               chip.classList.remove('selected');
@@ -1459,6 +1643,7 @@ class WhoseTabApp {
     }
     this.dom.inAppQuickToast.classList.remove('closing');
     this.dom.inAppQuickToast.classList.remove('hidden');
+    this.resetQuickToastTimer();
   }
 
   updateQuickToastButton() {
@@ -1520,6 +1705,10 @@ class WhoseTabApp {
 
   hideInAppQuickToast(markDismissed) {
     const toastEl = this.dom.inAppQuickToast;
+    if (this.quickToastAutoTimer) {
+      clearTimeout(this.quickToastAutoTimer);
+      this.quickToastAutoTimer = null;
+    }
     if (markDismissed && this.detectedPaytmData) {
       this.markPaymentDismissed(this.detectedPaytmData);
       this.detectedPaytmData = null;
@@ -1534,6 +1723,71 @@ class WhoseTabApp {
       toastEl.classList.remove('closing');
       this.toastCloseTimer = null;
     }, 200);
+  }
+
+  showInAppUpdateToast(latestVersion, apkUrl, releaseNotes) {
+    if (!latestVersion || !this.dom.inAppUpdateToast) return;
+    if (this.dom.updateModal && !this.dom.updateModal.classList.contains('hidden')) return;
+
+    this.pendingUpdateInfo = { version: latestVersion, apkUrl: apkUrl || '', notes: releaseNotes || '' };
+    if (this.dom.utVersionTitle) this.dom.utVersionTitle.textContent = `Update v${latestVersion} Available`;
+
+    const firstBullet = String(releaseNotes || '')
+      .split(/\r?\n/)
+      .map(s => s.replace(/^[-*•#\s]+/, '').trim())
+      .find(s => s && !s.toLowerCase().startsWith('what'));
+    if (this.dom.utSummarySubtitle) {
+      this.dom.utSummarySubtitle.textContent = firstBullet || 'Review changelog and install update';
+    }
+    if (this.dom.updateStatusNotice) {
+      this.dom.updateStatusNotice.textContent = `Update available: v${latestVersion}`;
+    }
+
+    if (this.updateToastCloseTimer) {
+      clearTimeout(this.updateToastCloseTimer);
+      this.updateToastCloseTimer = null;
+    }
+    if (this.updateToastTimer) clearTimeout(this.updateToastTimer);
+
+    this.dom.inAppUpdateToast.classList.remove('closing');
+    this.dom.inAppUpdateToast.classList.remove('hidden');
+
+    const DURATION_MS = 10000;
+    this.startToastCountdownBar(this.dom.utCountdownFill, DURATION_MS);
+    this.updateToastTimer = setTimeout(() => {
+      this.updateToastTimer = null;
+      this.hideInAppUpdateToast();
+    }, DURATION_MS);
+  }
+
+  hideInAppUpdateToast() {
+    const toastEl = this.dom.inAppUpdateToast;
+    if (this.updateToastTimer) {
+      clearTimeout(this.updateToastTimer);
+      this.updateToastTimer = null;
+    }
+    if (!toastEl || toastEl.classList.contains('hidden')) return;
+    if (this.updateToastCloseTimer) clearTimeout(this.updateToastCloseTimer);
+    toastEl.classList.add('closing');
+    this.updateToastCloseTimer = setTimeout(() => {
+      toastEl.classList.add('hidden');
+      toastEl.classList.remove('closing');
+      this.updateToastCloseTimer = null;
+    }, 200);
+  }
+
+  checkPendingUpdatePrompts() {
+    if (window._pendingUpdateModal) {
+      const m = window._pendingUpdateModal;
+      window._pendingUpdateModal = null;
+      this.showUpdatePrompt(m.v || m.version, m.u || m.apkUrl, m.n || m.notes);
+      return;
+    }
+    if (window._pendingUpdateToast) {
+      const t = window._pendingUpdateToast;
+      window._pendingUpdateToast = null;
+      this.showInAppUpdateToast(t.version, t.apkUrl, t.notes);
+    }
   }
 
   // ================= PENDING INCOMING BRIDGE EVENTS =================
@@ -2458,34 +2712,55 @@ class WhoseTabApp {
     }
 
     const fmtDate = ts => new Date(ts).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+    const round2 = v => Math.round(v * 100) / 100;
+    const grossLent = round2(openLent.reduce((sum, x) => sum + x.remaining, 0));
+    const borrowCut = round2(openBorrowed.reduce((sum, x) => sum + x.remaining, 0));
     const lines = [];
 
     if (netBalance > 0.01) {
-      lines.push(`Pending Summary: ₹${netBalance.toFixed(2)}`);
-      if (openLent.length > 0 || openBorrowed.length > 0) lines.push('');
-      openLent.forEach(item => {
-        lines.push(`• ${fmtDate(item.ts)}: ${item.title}: ₹${item.remaining.toFixed(2)}`);
-      });
-      openBorrowed.forEach(item => {
-        lines.push(`• ${fmtDate(item.ts)}: ${item.title} (Paid by you): (-₹${item.remaining.toFixed(2)})`);
-      });
+      if (borrowCut > 0.01) {
+        lines.push(`Total before deductions: ₹${grossLent.toFixed(2)}`);
+        openLent.forEach(item => {
+          lines.push(`• ${fmtDate(item.ts)}: ${item.title}: ₹${item.remaining.toFixed(2)}`);
+        });
+        lines.push('', `Cut off (recent borrows): -₹${borrowCut.toFixed(2)}`);
+        openBorrowed.forEach(item => {
+          lines.push(`• ${fmtDate(item.ts)}: ${item.title}: (-₹${item.remaining.toFixed(2)})`);
+        });
+        lines.push('', `Remaining balance to pay: ₹${netBalance.toFixed(2)}`);
+      } else {
+        lines.push(`Remaining balance to pay: ₹${netBalance.toFixed(2)}`);
+        if (openLent.length > 0) lines.push('');
+        openLent.forEach(item => {
+          lines.push(`• ${fmtDate(item.ts)}: ${item.title}: ₹${item.remaining.toFixed(2)}`);
+        });
+      }
     } else {
-      lines.push(`Pending to Pay: ₹${Math.abs(netBalance).toFixed(2)}`);
-      if (openBorrowed.length > 0 || openLent.length > 0) lines.push('');
-      openBorrowed.forEach(item => {
-        lines.push(`• ${fmtDate(item.ts)}: ${item.title}: ₹${item.remaining.toFixed(2)}`);
-      });
-      openLent.forEach(item => {
-        lines.push(`• ${fmtDate(item.ts)}: ${item.title} (Paid by me): (-₹${item.remaining.toFixed(2)})`);
-      });
+      if (grossLent > 0.01) {
+        lines.push(`Total borrowed: ₹${borrowCut.toFixed(2)}`);
+        openBorrowed.forEach(item => {
+          lines.push(`• ${fmtDate(item.ts)}: ${item.title}: ₹${item.remaining.toFixed(2)}`);
+        });
+        lines.push('', `Cut off from your tab: -₹${grossLent.toFixed(2)}`);
+        openLent.forEach(item => {
+          lines.push(`• ${fmtDate(item.ts)}: ${item.title}: (-₹${item.remaining.toFixed(2)})`);
+        });
+        lines.push('', `Remaining balance I owe: ₹${Math.abs(netBalance).toFixed(2)}`);
+      } else {
+        lines.push(`Remaining balance I owe: ₹${Math.abs(netBalance).toFixed(2)}`);
+        if (openBorrowed.length > 0) lines.push('');
+        openBorrowed.forEach(item => {
+          lines.push(`• ${fmtDate(item.ts)}: ${item.title}: ₹${item.remaining.toFixed(2)}`);
+        });
+      }
     }
 
     const summaryText = lines.join('\n');
     if (window.AndroidBridge && window.AndroidBridge.shareText) {
-      window.AndroidBridge.shareText(summaryText, 'Pending Summary');
+      window.AndroidBridge.shareText(summaryText, 'Remaining Balance');
     } else if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(summaryText);
-      alert('Pending summary copied to clipboard.');
+      alert('Remaining balance summary copied to clipboard.');
     }
   }
 
@@ -3179,10 +3454,53 @@ class WhoseTabApp {
   }
 
   // ================= UPDATES & BACKUPS =================
+  formatChangelogHtml(rawNotes) {
+    const cleanText = String(rawNotes || 'Improvements and bug fixes.').replace(/\u2014/g, '-');
+    const lines = cleanText.split(/\r?\n/);
+    const out = [];
+    let inList = false;
+
+    const closeList = () => {
+      if (inList) {
+        out.push('</ul>');
+        inList = false;
+      }
+    };
+
+    const renderInline = str => this.escapeHtml(str).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    lines.forEach(rawLine => {
+      const trimmed = rawLine.trim();
+      if (!trimmed) {
+        closeList();
+        return;
+      }
+      if (/^#{1,4}\s+/.test(trimmed)) {
+        closeList();
+        const heading = trimmed.replace(/^#{1,4}\s+/, '').trim();
+        out.push(`<div class="changelog-heading">${renderInline(heading)}</div>`);
+      } else if (/^[-*•]\s+/.test(trimmed)) {
+        if (!inList) {
+          out.push('<ul class="changelog-list">');
+          inList = true;
+        }
+        const item = trimmed.replace(/^[-*•]\s+/, '').trim();
+        out.push(`<li class="changelog-item">${renderInline(item)}</li>`);
+      } else {
+        closeList();
+        out.push(`<p class="changelog-para">${renderInline(trimmed)}</p>`);
+      }
+    });
+
+    closeList();
+    return out.length > 0 ? out.join('') : '<p class="changelog-para">Latest updates and bug fixes.</p>';
+  }
+
   showUpdatePrompt(latestVersion, apkUrl, releaseNotes) {
     if (!this.dom.updateModal) return;
+    this.hideInAppUpdateToast();
     this.dom.updateVersionTitle.textContent = `WhoseTab v${latestVersion}`;
-    this.dom.updateReleaseNotes.textContent = releaseNotes || 'Latest updates and improvements.';
+    this.dom.updateReleaseNotes.innerHTML = this.formatChangelogHtml(releaseNotes);
     this.dom.downloadUpdateBtn.dataset.apkUrl = apkUrl;
     this.dom.downloadUpdateBtn.disabled = false;
     this.dom.downloadUpdateBtn.textContent = 'Install Update';
