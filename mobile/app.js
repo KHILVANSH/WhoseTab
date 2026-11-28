@@ -1,5 +1,5 @@
 /**
- * WhoseTab — Application Logic
+ * WhoseTab: Application Logic
  * Offline bidirectional expense ledger, scanned payment linking, phone contact picker, and listener bridge.
  */
 
@@ -455,7 +455,7 @@ class WhoseTabApp {
         }
       } catch (e) {}
     }
-    this.dom.appVersionDisplay.textContent = 'v1.3.0';
+    this.dom.appVersionDisplay.textContent = 'v1.3.1';
   }
 
   // ================= SCANNER STATUS & PERMISSIONS =================
@@ -1301,7 +1301,7 @@ class WhoseTabApp {
       row.className = 'detection-row';
       row.innerHTML = `
         <div class="row-text-stack" style="flex:1;min-width:0;">
-          <span class="row-primary-text">${isRepay ? 'Received' : 'Paid'} ₹${amt.toFixed(2)} — ${this.escapeHtml(counterparty)}</span>
+          <span class="row-primary-text">${isRepay ? 'Received' : 'Paid'} ₹${amt.toFixed(2)} (${this.escapeHtml(counterparty)})</span>
           <span class="row-secondary-text">${matched ? `Linked: ${this.escapeHtml(matched.name)}` : 'Unlinked'}${dateStr ? ` • ${dateStr}` : ''}</span>
         </div>
         <button type="button" class="btn-inline-chip">Log</button>
@@ -2305,7 +2305,7 @@ class WhoseTabApp {
   getUnsettledEntriesForPerson(personId) {
     const netBalance = Math.round(((this.calculateNetBalances()[personId] || 0)) * 100) / 100;
     if (Math.abs(netBalance) <= 0.01) {
-      return { netBalance: 0, direction: 'settled', unsettledItems: [] };
+      return { netBalance: 0, direction: 'settled', openLent: [], openBorrowed: [], unsettledItems: [] };
     }
 
     const lentQueue = [];
@@ -2352,24 +2352,20 @@ class WhoseTabApp {
     const excessReceived = applyFifo(lentQueue, totalReceived);
     const excessPaid = applyFifo(borrowQueue, totalPaid);
 
-    // Cross-clear remaining opposite entries plus any excess settlements
-    if (netBalance > 0.01) {
-      const borrowRemainingSum = borrowQueue.reduce((a, x) => a + x.remaining, 0) + excessPaid;
-      applyFifo(lentQueue, borrowRemainingSum);
-      return {
-        netBalance,
-        direction: 'owed_to_me',
-        unsettledItems: lentQueue.filter(x => x.remaining > 0.01).sort((a, b) => b.ts - a.ts)
-      };
-    } else {
-      const lentRemainingSum = lentQueue.reduce((a, x) => a + x.remaining, 0) + excessReceived;
-      applyFifo(borrowQueue, lentRemainingSum);
-      return {
-        netBalance,
-        direction: 'i_owe',
-        unsettledItems: borrowQueue.filter(x => x.remaining > 0.01).sort((a, b) => b.ts - a.ts)
-      };
-    }
+    // Only apply actual settlement payments across queues; keep unsettled borrowed items intact so they show explicitly
+    if (excessReceived > 0.01) applyFifo(borrowQueue, excessReceived);
+    if (excessPaid > 0.01) applyFifo(lentQueue, excessPaid);
+
+    const openLent = lentQueue.filter(x => x.remaining > 0.01).sort((a, b) => b.ts - a.ts);
+    const openBorrowed = borrowQueue.filter(x => x.remaining > 0.01).sort((a, b) => b.ts - a.ts);
+
+    return {
+      netBalance,
+      direction: netBalance > 0.01 ? 'owed_to_me' : 'i_owe',
+      openLent,
+      openBorrowed,
+      unsettledItems: [...openLent, ...openBorrowed].sort((a, b) => b.ts - a.ts)
+    };
   }
 
   openPersonActionsModal(personId) {
@@ -2455,30 +2451,38 @@ class WhoseTabApp {
   sharePersonSummary(personId) {
     const person = this.ledger.people.find(p => p.id === personId);
     if (!person) return;
-    const { netBalance, unsettledItems } = this.getUnsettledEntriesForPerson(personId);
+    const { netBalance, openLent, openBorrowed } = this.getUnsettledEntriesForPerson(personId);
     if (Math.abs(netBalance) <= 0.01) {
       alert(`All entries with ${person.name} are already settled.`);
       return;
     }
 
-    const lines = [`WhoseTab Pending Summary — ${person.name}`];
-    if (netBalance > 0.01) {
-      lines.push(`Owes me: ₹${netBalance.toFixed(2)}`);
-    } else {
-      lines.push(`I owe: ₹${Math.abs(netBalance).toFixed(2)}`);
-    }
+    const fmtDate = ts => new Date(ts).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+    const lines = [];
 
-    if (unsettledItems.length > 0) {
-      lines.push('', netBalance > 0.01 ? 'Pending owed items:' : 'Pending borrowed items:');
-      unsettledItems.forEach(item => {
-        const dStr = new Date(item.ts).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
-        lines.push(`- ${dStr}: ${item.title} — ₹${item.remaining.toFixed(2)}`);
+    if (netBalance > 0.01) {
+      lines.push(`Pending Summary: ₹${netBalance.toFixed(2)}`);
+      if (openLent.length > 0 || openBorrowed.length > 0) lines.push('');
+      openLent.forEach(item => {
+        lines.push(`• ${fmtDate(item.ts)}: ${item.title}: ₹${item.remaining.toFixed(2)}`);
+      });
+      openBorrowed.forEach(item => {
+        lines.push(`• ${fmtDate(item.ts)}: ${item.title} (Paid by you): (-₹${item.remaining.toFixed(2)})`);
+      });
+    } else {
+      lines.push(`Pending to Pay: ₹${Math.abs(netBalance).toFixed(2)}`);
+      if (openBorrowed.length > 0 || openLent.length > 0) lines.push('');
+      openBorrowed.forEach(item => {
+        lines.push(`• ${fmtDate(item.ts)}: ${item.title}: ₹${item.remaining.toFixed(2)}`);
+      });
+      openLent.forEach(item => {
+        lines.push(`• ${fmtDate(item.ts)}: ${item.title} (Paid by me): (-₹${item.remaining.toFixed(2)})`);
       });
     }
 
     const summaryText = lines.join('\n');
     if (window.AndroidBridge && window.AndroidBridge.shareText) {
-      window.AndroidBridge.shareText(summaryText, `Pending with ${person.name}`);
+      window.AndroidBridge.shareText(summaryText, 'Pending Summary');
     } else if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(summaryText);
       alert('Pending summary copied to clipboard.');
@@ -2504,7 +2508,7 @@ class WhoseTabApp {
     });
 
     if (owedToMe.length === 0 && iOwe.length === 0) {
-      alert('All balances are settled — nothing pending to share.');
+      alert('All balances are settled. Nothing pending to share.');
       return;
     }
 
@@ -2518,7 +2522,7 @@ class WhoseTabApp {
     if (iOwe.length > 0) {
       lines.push('', `I borrowed / owe (Total ₹${totalPay.toFixed(2)}):`);
       iOwe.forEach(row => {
-        lines.push(`• ${row.person.name}: ₹${row.bal.toFixed(2)}`);
+        lines.push(`• ${row.person.name}: (-₹${row.bal.toFixed(2)})`);
       });
     }
 
@@ -2951,7 +2955,7 @@ class WhoseTabApp {
     const identityMatch = this.findMatchingContact(sender, handle);
     const preferredMatch = identityMatch || (suggestion ? suggestion.person : null);
     if (this.ledger.people.length === 0) {
-      select.innerHTML = '<option value="">No contacts yet — save sender above</option>';
+      select.innerHTML = '<option value="">No contacts yet. Save sender above.</option>';
       if (this.dom.repaymentSaveAliasRow) this.dom.repaymentSaveAliasRow.classList.add('hidden');
       return;
     }
@@ -2972,7 +2976,7 @@ class WhoseTabApp {
       const opt = document.createElement('option');
       opt.value = p.id;
       const bal = balances[p.id] || 0;
-      opt.textContent = `${p.name} — ${bal > 0.01 ? `Owes ₹${bal.toFixed(2)}` : bal < -0.01 ? `You owe ₹${Math.abs(bal).toFixed(2)}` : 'Settled'}`;
+      opt.textContent = `${p.name} (${bal > 0.01 ? `Owes ₹${bal.toFixed(2)}` : bal < -0.01 ? `You owe ₹${Math.abs(bal).toFixed(2)}` : 'Settled'})`;
       if (preferredMatch && p.id === preferredMatch.id) opt.selected = true;
       select.appendChild(opt);
     });

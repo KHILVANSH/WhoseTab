@@ -1,5 +1,5 @@
 {
-  "name": "WhoseTab — Fast Offline Peer Expense Tracker & Paytm Logger",
+  "name": "WhoseTab: Offline Peer Expense Tracker & Payment Logger",
   "short_name": "WhoseTab",
   "start_url": "./index.html",
   "display": "standalone",
